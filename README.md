@@ -1,6 +1,6 @@
-# Game Development Guide
+# Game Development Guide (C++/SDL2 Focus)
 
-Welcome to this comprehensive guide on developing various components of a game. This document will walk you through the fundamental concepts and provide code examples for essential game systems.
+Welcome to this comprehensive guide on developing various components of a game using C++ with the SDL2 library. This document will walk you through the fundamental concepts and provide C++ code examples for essential game systems. We'll also touch upon using CMake for project management.
 
 ## Table of Contents
 
@@ -14,118 +14,253 @@ Welcome to this comprehensive guide on developing various components of a game. 
 
 ---
 
+## 0. Project Setup with CMake and SDL2 (Brief Overview)
+
+Before diving into specific components, a typical C++/SDL2 project managed by CMake might look like this:
+
+**`CMakeLists.txt` (Simplified):**
+```cmake
+cmake_minimum_required(VERSION 3.10)
+project(MyGameEngine LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find SDL2 and SDL2_image (for textures)
+find_package(SDL2 REQUIRED)
+find_package(SDL2_image REQUIRED) # For IMG_LoadTexture
+
+# Add your source files
+add_executable(MyGame
+    src/main.cpp
+    src/Game.cpp
+    # ... other .cpp files
+)
+
+# Link SDL2 libraries
+target_include_directories(MyGame PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+target_link_libraries(MyGame PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+
+# On some systems (like Windows with MSVC), you might need to copy DLLs
+# or set up run path dependencies.
+```
+
+You would then typically have a project structure like:
+```
+MyGameEngine/
+├── CMakeLists.txt
+├── src/
+│   ├── main.cpp
+│   ├── Game.h
+│   ├── Game.cpp
+│   ├── TextureManager.h
+│   ├── TextureManager.cpp
+│   └── ... (other components)
+├── assets/
+│   ├── images/
+│   └── sounds/
+└── build/ (CMake generates build files here)
+```
+To build, you'd navigate to the `build` directory and run `cmake ..` followed by `make` (on Unix-like systems) or open the generated solution file in an IDE like Visual Studio.
+
+---
+
 ## 1. Sprite Renderer
 
 ### Conceptual Overview
 
-A Sprite Renderer is responsible for drawing 2D images (sprites) onto the screen. Sprites are the visual building blocks for most 2D games, representing characters, objects, UI elements, etc. The renderer needs to handle aspects like position, rotation, scale, and transparency of sprites.
+A Sprite Renderer is responsible for drawing 2D images (sprites) onto the screen. In SDL2, sprites are typically loaded as `SDL_Texture` objects and rendered using an `SDL_Renderer`. The renderer needs to handle position, rotation, scale, and portions of textures (for sprite sheets).
 
-### How to Code and Develop
+### How to Code and Develop (C++/SDL2)
 
-Developing a sprite renderer typically involves the following steps:
+1.  **Initialize SDL and Create Renderer:** Your main game class will initialize SDL, create an `SDL_Window`, and an `SDL_Renderer` tied to that window.
+2.  **Texture Loading:** Use a texture manager class to load image files (PNG, JPG, etc.) into `SDL_Texture*` objects. SDL_image library (`IMG_LoadTexture`) is commonly used for this. Textures should be managed to avoid reloading and to handle cleanup (`SDL_DestroyTexture`).
+3.  **Sprite Representation:** Create a `Sprite` class or struct. It should store:
+    *   An `SDL_Texture*`.
+    *   `SDL_Rect` for the destination on screen (`destRect` : x, y, width, height).
+    *   Optionally, an `SDL_Rect` for the source rectangle from the texture (`srcRect`) if using sprite sheets.
+    *   Optionally, rotation angle (`double`), flip status (`SDL_RendererFlip`).
+4.  **Rendering Loop:** In your game's main loop:
+    *   Clear the renderer: `SDL_RenderClear(renderer);`
+    *   Iterate through all visible sprites.
+    *   For each sprite, use `SDL_RenderCopyEx()` to draw it. This function allows specifying source and destination rectangles, rotation, center of rotation, and flipping.
+    *   Present the renderer: `SDL_RenderPresent(renderer);`
 
-1.  **Load Textures:** Sprites are usually derived from texture files (e.g., PNG, JPG). You'll need a mechanism to load these textures into memory.
-2.  **Define Sprite Data:** Create a data structure or class to hold information about each sprite, such as its texture, position, rotation, scale, color tint, and drawing order (layer).
-3.  **Rendering Loop:** In your game's main loop, iterate through all active sprites and draw them. This often involves using a graphics library (like OpenGL, DirectX, SDL, SFML, or a game engine's built-in renderer).
-4.  **Transformations:** Apply transformations (translation, rotation, scaling) to sprites before drawing them. This is usually done using matrices.
-5.  **Batching (Optional but Recommended):** To improve performance, group sprites that use the same texture or shader and draw them in a single batch call to the graphics API.
+### Code Example (C++/SDL2)
 
-### Code Example (Conceptual - using a hypothetical Python-like graphics library)
+**`TextureManager.h` (Conceptual)**
+```cpp
+// TextureManager.h
+#pragma once
+#include <SDL.h>
+#include <SDL_image.h>
+#include <string>
+#include <map>
 
-```python
-class Texture:
-    def __init__(self, filepath):
-        # In a real scenario, this would load image data
-        self.image_data = self._load_image(filepath)
-        self.width, self.height = self._get_dimensions(self.image_data)
-        print(f"Texture '{filepath}' loaded ({self.width}x{self.height})")
+class TextureManager {
+public:
+    static TextureManager& getInstance(); // Singleton pattern
 
-    def _load_image(self, filepath):
-        # Placeholder for actual image loading logic
-        # e.g., using libraries like Pillow (PIL) in Python
-        # or platform-specific APIs
-        return f"Image data for {filepath}"
+    SDL_Texture* loadTexture(const std::string& filePath, SDL_Renderer* renderer);
+    void draw(SDL_Texture* texture, SDL_Rect srcRect, SDL_Rect destRect, SDL_Renderer* renderer, double angle = 0.0, SDL_Point* center = nullptr, SDL_RendererFlip flip = SDL_FLIP_NONE);
+    void drawFrame(SDL_Texture* texture, SDL_Rect destRect, int frameWidth, int frameHeight, int currentRow, int currentFrame, SDL_Renderer* renderer, double angle = 0.0, SDL_RendererFlip flip = SDL_FLIP_NONE);
 
-    def _get_dimensions(self, image_data):
-        # Placeholder for getting dimensions
-        return 100, 100 # Example dimensions
+    void clean(); // Clean up loaded textures
 
-class Sprite:
-    def __init__(self, texture, position=(0, 0), scale=(1, 1), rotation=0.0, tint=(255, 255, 255, 255)):
-        self.texture = texture
-        self.position = list(position) # (x, y)
-        self.scale = list(scale)       # (sx, sy)
-        self.rotation = rotation     # degrees
-        self.tint = list(tint)         # (r, g, b, a)
-        self.visible = True
-        self.source_rect = None # Added for sprite sheet animation (x, y, width, height)
+private:
+    TextureManager() = default; // Private constructor for singleton
+    ~TextureManager();          // Private destructor for singleton
 
-class SpriteRenderer:
-    def __init__(self, graphics_api):
-        self.graphics_api = graphics_api # Hypothetical graphics API object
-        self.sprites_to_render = []
+    std::map<std::string, SDL_Texture*> textureMap;
 
-    def add_sprite(self, sprite):
-        self.sprites_to_render.append(sprite)
+    // Prevent copying
+    TextureManager(const TextureManager&) = delete;
+    TextureManager& operator=(const TextureManager&) = delete;
+};
+```
 
-    def remove_sprite(self, sprite):
-        if sprite in self.sprites_to_render:
-            self.sprites_to_render.remove(sprite)
+**`TextureManager.cpp` (Conceptual)**
+```cpp
+// TextureManager.cpp
+#include "TextureManager.h"
+#include <iostream>
 
-    def render(self):
-        # Sort sprites by layer or depth if necessary (not shown here)
-        for sprite in self.sprites_to_render:
-            if not sprite.visible:
-                continue
+TextureManager& TextureManager::getInstance() {
+    static TextureManager instance;
+    return instance;
+}
 
-            # In a real renderer, you'd set up transformation matrices
-            # and then make a draw call.
-            # If sprite.source_rect is defined, draw only that part of the texture.
-            if sprite.source_rect:
-                self.graphics_api.draw_texture_part(
-                    sprite.texture,
-                    sprite.position,
-                    sprite.rotation,
-                    sprite.scale,
-                    sprite.tint,
-                    sprite.source_rect # (sx, sy, sw, sh) from the texture
-                )
-            else:
-                self.graphics_api.draw_texture_full(
-                    sprite.texture,
-                    sprite.position,
-                    sprite.rotation,
-                    sprite.scale,
-                    sprite.tint
-                )
-        # If using batching, this is where you'd flush the batch
-        # self.graphics_api.flush_batch()
+TextureManager::~TextureManager() {
+    clean();
+}
 
-# Example Usage (Conceptual)
-# class HypotheticalGraphicsAPI:
-#     def draw_texture_full(self, texture, position, rotation, scale, tint):
-#         print(f"Drawing FULL '{texture.image_data}' at {position} rot {rotation} scale {scale} tint {tint}")
-#     def draw_texture_part(self, texture, position, rotation, scale, tint, source_rect):
-#         print(f"Drawing PART of '{texture.image_data}' (rect: {source_rect}) at {position} rot {rotation} scale {scale} tint {tint}")
+SDL_Texture* TextureManager::loadTexture(const std::string& filePath, SDL_Renderer* renderer) {
+    if (textureMap.count(filePath)) {
+        return textureMap[filePath]; // Return cached texture
+    }
+
+    SDL_Texture* texture = IMG_LoadTexture(renderer, filePath.c_str());
+    if (!texture) {
+        std::cerr << "Failed to load texture: " << filePath << " - SDL_Error: " << IMG_GetError() << std::endl;
+        return nullptr;
+    }
+    textureMap[filePath] = texture;
+    return texture;
+}
+
+void TextureManager::draw(SDL_Texture* texture, SDL_Rect srcRect, SDL_Rect destRect, SDL_Renderer* renderer, double angle, SDL_Point* center, SDL_RendererFlip flip) {
+    if (!texture || !renderer) return;
+    SDL_RenderCopyEx(renderer, texture, &srcRect, &destRect, angle, center, flip);
+}
+
+// Specific for drawing a single frame from a sprite sheet
+void TextureManager::drawFrame(SDL_Texture* texture, SDL_Rect destRect, int frameWidth, int frameHeight, int currentRow, int currentFrame, SDL_Renderer* renderer, double angle, SDL_RendererFlip flip) {
+    if (!texture || !renderer) return;
+    SDL_Rect srcRect;
+    srcRect.x = frameWidth * currentFrame;
+    src_rect.y = frameHeight * currentRow; // If sprite sheet has multiple rows
+    srcRect.w = frameWidth;
+    srcRect.h = frameHeight;
+
+    // The destination rect's w/h should ideally match frameWidth/frameHeight or be scaled
+    // destRect.w = frameWidth;
+    // destRect.h = frameHeight;
+
+    SDL_RenderCopyEx(renderer, texture, &srcRect, &destRect, angle, nullptr, flip);
+}
 
 
-# graphics = HypotheticalGraphicsAPI()
-# renderer = SpriteRenderer(graphics)
+void TextureManager::clean() {
+    for (auto const& [key, val] : textureMap) {
+        SDL_DestroyTexture(val);
+    }
+    textureMap.clear();
+    std::cout << "TextureManager cleaned." << std::endl;
+}
+```
 
-# player_texture = Texture("player.png")
-# player_sprite = Sprite(player_texture, position=(100, 150))
-# renderer.add_sprite(player_sprite)
+**`Sprite.h` (Conceptual)**
+```cpp
+// Sprite.h
+#pragma once
+#include <SDL.h>
+#include <string>
 
-# In game loop:
-# renderer.render()
+struct Sprite {
+    SDL_Texture* texture = nullptr;
+    SDL_Rect srcRect = {0,0,0,0};       // Source rectangle from the texture atlas
+    SDL_Rect destRect = {0,0,0,0};      // Destination rectangle on the screen
+    double angle = 0.0;                 // Rotation angle
+    SDL_RendererFlip flip = SDL_FLIP_NONE;
+    bool visible = true;
+    int z_order = 0; // For sorting/layering
+
+    // Constructor could take initial values
+    Sprite(SDL_Texture* tex, int x, int y, int w, int h, int srcX=0, int srcY=0, int srcW=0, int srcH=0)
+        : texture(tex) {
+        destRect = {x, y, w, h};
+        if (srcW > 0 && srcH > 0) { // Full texture if srcW/srcH are 0
+            srcRect = {srcX, srcY, srcW, srcH};
+        } else if (tex) {
+            SDL_QueryTexture(tex, nullptr, nullptr, &srcRect.w, &srcRect.h); // Use full texture dimensions
+        }
+    }
+
+    void render(SDL_Renderer* renderer) {
+        if (!visible || !texture || !renderer) return;
+        SDL_RenderCopyEx(renderer, texture, (srcRect.w > 0 && srcRect.h > 0) ? &srcRect : nullptr, &destRect, angle, nullptr, flip);
+    }
+};
+```
+
+**`Game.cpp` (Partial - Rendering Part)**
+```cpp
+// In your Game class render method or a dedicated SpriteRenderer class
+// Assume 'renderer' is your SDL_Renderer* and 'sprites' is a std::vector<Sprite>
+
+// void Game::render() {
+//     SDL_RenderClear(renderer); // Clear screen
+//
+//     // Sort sprites by z_order if necessary
+//     // std::sort(sprites.begin(), sprites.end(), [](const Sprite& a, const Sprite& b){
+//     //    return a.z_order < b.z_order;
+//     // });
+//
+//     for (const auto& sprite : sprites) {
+//         sprite.render(renderer); // Call sprite's own render method
+//     }
+//
+//     SDL_RenderPresent(renderer); // Swap buffers
+// }
+
+// In main.cpp or Game::init()
+// SDL_Init(SDL_INIT_VIDEO);
+// IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG); // Initialize SDL_image
+// window = SDL_CreateWindow(...);
+// renderer = SDL_CreateRenderer(...);
+//
+// SDL_Texture* playerTex = TextureManager::getInstance().loadTexture("assets/player.png", renderer);
+// if (playerTex) {
+//     int texW, texH;
+//     SDL_QueryTexture(playerTex, nullptr, nullptr, &texW, &texH);
+//     sprites.emplace_back(playerTex, 100, 100, texW, texH); // Create a sprite
+// }
+//
+// At shutdown:
+// TextureManager::getInstance().clean();
+// SDL_DestroyRenderer(renderer);
+// SDL_DestroyWindow(window);
+// IMG_Quit();
+// SDL_Quit();
+
 ```
 
 **Explanation:**
 
-*   `Texture`: Represents an image loaded from a file.
-*   `Sprite`: Holds all the properties of a single sprite instance, including an optional `source_rect` for drawing portions of a texture (used by animation).
-*   `SpriteRenderer`: Manages a list of sprites and uses a `graphics_api` to draw them. It checks for `source_rect` to decide whether to draw the full texture or a part of it.
-*   The `render` method iterates through visible sprites and calls the graphics API to draw each one. Real-world implementations would involve complex matrix math for transformations and potentially sophisticated batching systems.
+*   **`TextureManager`**: A singleton class to handle loading (`IMG_LoadTexture`), caching, and basic drawing of `SDL_Texture`s. `drawFrame` is specialized for sprite sheets.
+*   **`Sprite`**: A struct holding an `SDL_Texture*`, source (`srcRect` for sprite sheets), destination (`destRect`), angle, and flip status. It has its own `render` method.
+*   **Rendering**: `SDL_RenderCopyEx` is the key SDL function for drawing textures with transformations.
+*   **Resource Management**: `SDL_Texture`s must be destroyed with `SDL_DestroyTexture` when no longer needed. The `TextureManager`'s `clean` method handles this for cached textures. Smart pointers (like `std::unique_ptr` with a custom deleter) can also be used for managing SDL resources.
 
 ---
 
@@ -133,148 +268,156 @@ class SpriteRenderer:
 
 ### Conceptual Overview
 
-A game physics system simulates realistic motion and interactions between game objects. This can range from simple movement and gravity to complex rigid body dynamics, soft body simulations, and fluid dynamics. For most 2D games, a 2D rigid body physics engine is common.
+A game physics system simulates motion and interactions. For 2D games, this often means 2D rigid body dynamics. Key elements include position, velocity, acceleration, forces (like gravity), and mass.
 
-Key concepts:
+### How to Code and Develop (C++)
 
-*   **Rigid Body:** An object that does not deform. It has properties like mass, velocity, acceleration, friction, and restitution (bounciness).
-*   **Forces:** Influences that can change a body's motion (e.g., gravity, thrust, springs).
-*   **Impulses:** Instantaneous changes in velocity (e.g., from a collision).
-*   **Collision Detection:** Identifying when and where objects intersect (covered more in "Collision Handling").
-*   **Collision Response:** Determining how objects react after a collision (e.g., bouncing off, stopping).
-*   **Integration:** The numerical method used to update an object's position and orientation over time based on its velocity and acceleration (e.g., Euler integration, Verlet integration).
+1.  **Vector Math Class:** Implement a 2D vector class (`Vec2D`) for positions, velocities, forces, with operations like addition, subtraction, scalar multiplication, magnitude, normalization.
+2.  **RigidBody Component:** A class (`RigidBody2D`) storing:
+    *   `Vec2D position`, `Vec2D velocity`, `Vec2D acceleration`.
+    *   `float mass`, `float inverseMass` (0 for static objects).
+    *   `Vec2D forceAccumulator` to sum forces over a frame.
+    *   Properties like `float restitution` (bounciness), `float friction`.
+3.  **Integration:** Update position and velocity based on acceleration and time step (`float deltaTime`). Euler integration is simplest:
+    *   `acceleration = forceAccumulator * inverseMass;`
+    *   `velocity += acceleration * deltaTime;`
+    *   `position += velocity * deltaTime;`
+    *   Clear `forceAccumulator`.
+    More advanced integrators (Verlet, Runge-Kutta) offer better stability.
+4.  **Physics World:** A class to manage all `RigidBody2D` instances, apply global forces (e.g., gravity), and call the integration step for each body.
+5.  **Collision Integration:** The physics system will closely interact with the Collision Handling system for response.
 
-### How to Code and Develop
+**Note:** For more complex physics, consider using a dedicated 2D physics library like Box2D or Chipmunk. Integrating them involves creating bodies in the physics world that correspond to your game entities.
 
-1.  **Define Rigid Body Component:** Create a class or structure to represent a rigid body with its physical properties.
-2.  **Physics World/Engine:** This class will manage all rigid bodies, apply global forces (like gravity), and step the simulation forward in time.
-3.  **Integrator:** Implement an integration method. Euler integration is simple to start with:
-    *   `velocity += acceleration * deltaTime`
-    *   `position += velocity * deltaTime`
-4.  **Force Accumulation:** Before each integration step, sum all forces acting on each body.
-5.  **Collision Detection and Response:** Integrate with your collision handling system. When collisions occur, apply appropriate responses (e.g., impulse-based resolution).
+### Code Example (Simple 2D Rigid Body in C++)
 
-### Code Example (Simple 2D Rigid Body and Euler Integration)
+**`Vec2D.h` (Conceptual)**
+```cpp
+// Vec2D.h
+#pragma once
+#include <cmath>
 
-```python
-import math
+struct Vec2D {
+    float x = 0.0f, y = 0.0f;
 
-class Vec2:
-    def __init__(self, x=0.0, y=0.0):
-        self.x = float(x)
-        self.y = float(y)
+    Vec2D() = default;
+    Vec2D(float x, float y) : x(x), y(y) {}
 
-    def __add__(self, other):
-        return Vec2(self.x + other.x, self.y + other.y)
+    Vec2D operator+(const Vec2D& other) const { return Vec2D(x + other.x, y + other.y); }
+    Vec2D operator-(const Vec2D& other) const { return Vec2D(x - other.x, y - other.y); }
+    Vec2D operator*(float scalar) const { return Vec2D(x * scalar, y * scalar); }
+    Vec2D& operator+=(const Vec2D& other) { x += other.x; y += other.y; return *this; }
+    // Add other operators: -=, *=, /=, ==, !=
 
-    def __sub__(self, other):
-        return Vec2(self.x - other.x, self.y - other.y)
-
-    def __mul__(self, scalar):
-        return Vec2(self.x * float(scalar), self.y * float(scalar))
-
-    def __truediv__(self, scalar):
-        if scalar == 0: return Vec2(0,0) # Avoid division by zero
-        return Vec2(self.x / float(scalar), self.y / float(scalar))
-
-    def length(self):
-        return math.sqrt(self.x**2 + self.y**2)
-
-    def normalize(self):
-        l = self.length()
-        if l == 0: return Vec2(0,0)
-        return Vec2(self.x / l, self.y / l)
-
-    def __str__(self):
-        return f"Vec2({self.x:.2f}, {self.y:.2f})"
-
-class RigidBody2D:
-    def __init__(self, mass=1.0, position=None, velocity=None):
-        self.mass = float(mass)
-        self.inverse_mass = 1.0 / self.mass if self.mass != 0 else 0.0 # Infinite mass for static objects
-        self.position = position if position is not None else Vec2(0,0)
-        self.velocity = velocity if velocity is not None else Vec2(0,0)
-        self.acceleration = Vec2(0,0) # Current acceleration
-        self.force_accumulator = Vec2(0,0) # Sum of forces for this frame
-        self.friction_coefficient = 0.1 # Simple air friction coefficient
-        self.restitution = 0.5 # Bounciness (0 to 1)
-
-    def add_force(self, force_vector):
-        self.force_accumulator += force_vector
-
-    def clear_forces(self):
-        self.force_accumulator = Vec2(0,0)
-
-    def integrate(self, dt): # dt is delta time (time since last frame)
-        if self.inverse_mass == 0: # Static body
-            self.velocity = Vec2(0,0) # Static bodies don't move
-            return
-
-        # Apply accumulated forces to get acceleration (F=ma -> a=F/m)
-        self.acceleration = self.force_accumulator * self.inverse_mass
-
-        # Simple Euler integration
-        self.velocity += self.acceleration * dt
-        self.position += self.velocity * dt
-
-        # Apply some damping/friction (optional, can be more sophisticated)
-        # This is a simple air drag model
-        if self.velocity.length() > 0: # only apply if moving
-             friction_force = self.velocity.normalize() * -1 * self.friction_coefficient * self.velocity.length()**2 # F_drag = -k * v^2
-             self.add_force(friction_force) # This force will be applied in the next integration step's acceleration calculation if not cleared immediately
-
-        # Clear forces for the next frame AFTER they've been used for acceleration
-        self.clear_forces()
-
-
-class PhysicsWorld:
-    def __init__(self, gravity=None): # Typical gravity, y-down
-        self.bodies = []
-        self.gravity = gravity if gravity is not None else Vec2(0, 9.81)
-
-
-    def add_body(self, body):
-        self.bodies.append(body)
-
-    def remove_body(self, body):
-        if body in self.bodies:
-            self.bodies.remove(body)
-
-    def step(self, dt):
-        for body in self.bodies:
-            if body.inverse_mass == 0: # Don't apply gravity to static/kinematic objects with infinite mass
-                body.clear_forces() # Ensure static bodies don't accumulate forces if any were added
-                continue
-            # Apply gravity (mass dependent)
-            body.add_force(self.gravity * body.mass)
-
-        # Integration step
-        for body in self.bodies:
-            body.integrate(dt) # Forces are cleared inside integrate after use
-
-        # Collision detection and response would go here
-        # self.handle_collisions(dt)
-
-# Example Usage:
-# world = PhysicsWorld(gravity=Vec2(0, 981)) # Pixels/second^2
-# ball = RigidBody2D(mass=1.0, position=Vec2(100, 50))
-# world.add_body(ball)
-# ground = RigidBody2D(mass=0, position=Vec2(0, 500)) # Static body
-# world.add_body(ground)
-
-
-# In game loop:
-# dt = 1.0 / 60.0 # Assuming 60 FPS
-# world.step(dt)
-# print(f"Ball position: {ball.position}, velocity: {ball.velocity}")
+    float length() const { return std::sqrt(x * x + y * y); }
+    Vec2D normalized() const {
+        float l = length();
+        if (l == 0) return Vec2D(0,0);
+        return Vec2D(x / l, y / l);
+    }
+};
 ```
 
-**Explanation:**
+**`RigidBody2D.h` (Conceptual)**
+```cpp
+// RigidBody2D.h
+#pragma once
+#include "Vec2D.h"
 
-*   `Vec2`: A simple 2D vector class for positions, velocities, forces, with added methods like `length`, `normalize`, and `__truediv__`.
-*   `RigidBody2D`: Stores physical properties. `add_force` accumulates forces, and `integrate` updates position and velocity using Euler integration. Friction is conceptualized and would typically be part of force accumulation or a direct velocity modification.
-*   `PhysicsWorld`: Manages `RigidBody2D` objects, applies global forces like gravity, and calls `integrate` on each body.
-*   The `integrate` method uses Euler integration. More advanced integrators like Verlet or Runge-Kutta provide better stability and accuracy, especially with larger time steps or more complex forces.
+class RigidBody2D {
+public:
+    Vec2D position;
+    Vec2D velocity;
+    Vec2D acceleration;
+
+    float mass;
+    float inverseMass; // 1.0f / mass, or 0.0f for static (infinite mass) objects
+    float restitution; // Bounciness: 0.0 (no bounce) to 1.0 (perfect bounce)
+    float staticFriction;
+    float dynamicFriction;
+
+    RigidBody2D(float m = 1.0f, Vec2D pos = {0,0}, Vec2D vel = {0,0}, float e = 0.5f)
+        : position(pos), velocity(vel), mass(m), restitution(e),
+          staticFriction(0.5f), dynamicFriction(0.3f) {
+        if (mass == 0.0f) {
+            inverseMass = 0.0f; // Static body
+        } else {
+            inverseMass = 1.0f / mass;
+        }
+        acceleration = {0.0f, 0.0f};
+        forceAccumulator = {0.0f, 0.0f};
+    }
+
+    void applyForce(const Vec2D& force) {
+        forceAccumulator += force;
+    }
+
+    void clearForces() {
+        forceAccumulator = {0.0f, 0.0f};
+    }
+
+    void integrate(float deltaTime) {
+        if (inverseMass == 0.0f) { // Static body
+            velocity = {0,0}; // Ensure it doesn't move due to residual forces
+            clearForces();
+            return;
+        }
+
+        acceleration = forceAccumulator * inverseMass;
+        velocity += acceleration * deltaTime;
+        position += velocity * deltaTime;
+
+        // Simple velocity damping (air resistance or general friction)
+        // velocity = velocity * (1.0f - 0.1f * deltaTime); // Adjust damping factor
+
+        clearForces();
+    }
+
+private:
+    Vec2D forceAccumulator;
+};
+```
+
+**`PhysicsWorld.h` (Conceptual)**
+```cpp
+// PhysicsWorld.h
+#pragma once
+#include <vector>
+#include "RigidBody2D.h" // Assuming RigidBody2D is defined
+
+class PhysicsWorld {
+public:
+    Vec2D gravity = {0.0f, 9.81f * 50}; // Gravity in pixels/sec^2 (adjust 50 as needed for scale)
+
+    void addBody(RigidBody2D* body) {
+        bodies.push_back(body);
+    }
+
+    void update(float deltaTime) {
+        for (RigidBody2D* body : bodies) {
+            if (body->inverseMass == 0.0f) continue; // Don't apply gravity to static bodies
+            body->applyForce(gravity * body->mass);
+        }
+
+        for (RigidBody2D* body : bodies) {
+            body->integrate(deltaTime);
+        }
+
+        // Collision detection and response would happen here
+        // checkCollisions(deltaTime);
+    }
+
+    // void checkCollisions(float deltaTime); // To be implemented with collision system
+
+private:
+    std::vector<RigidBody2D*> bodies; // Using raw pointers; consider smart pointers or other ownership models
+};
+```
+**Explanation:**
+*   `Vec2D`: A basic struct for 2D vector math.
+*   `RigidBody2D`: Holds physical properties and integration logic. `inverseMass = 0` signifies a static object.
+*   `PhysicsWorld`: Manages bodies and applies global forces. The `update` method applies gravity and then integrates each body.
+*   **Memory Management**: The `PhysicsWorld` example uses raw pointers `RigidBody2D*`. In a real engine, you'd need a clear ownership model, possibly using smart pointers (`std::unique_ptr` if `PhysicsWorld` owns them, or `std::shared_ptr` if shared) or an Entity-Component System (ECS) where physics data are components.
 
 ---
 
@@ -282,178 +425,175 @@ class PhysicsWorld:
 
 ### Conceptual Overview
 
-Sprite animation creates the illusion of movement by rapidly displaying a sequence of slightly different images (frames). This is commonly used for character movements, special effects, and dynamic UI elements.
+Sprite animation involves displaying a sequence of frames (different images or different parts of a sprite sheet) over time to create an illusion of motion.
 
-Key concepts:
+### How to Code and Develop (C++/SDL2)
 
-*   **Frames:** Individual images in an animation sequence.
-*   **Sprite Sheet:** A single image file containing multiple frames of an animation, often arranged in a grid. This is efficient for texture memory and rendering.
-*   **Animation Clip:** A defined sequence of frames from a sprite sheet, along with timing information (e.g., duration per frame or total duration).
-*   **Animator/Animation Controller:** A component that manages and plays animation clips for a sprite. It keeps track of the current frame, playback time, and looping behavior.
+1.  **Frame Definition:** Each frame is typically a specific rectangular area (`SDL_Rect`) on a sprite sheet texture.
+2.  **Animation Clip:** Create a class/struct (`AnimationClip`) to store:
+    *   A `std::vector<SDL_Rect>` for the source rectangles of each frame.
+    *   A `std::vector<float>` for the duration each frame should be displayed (or a single `float` for uniform duration).
+    *   A `bool` for looping.
+    *   The `SDL_Texture*` (sprite sheet) this animation uses.
+3.  **Animator Component:** A class (`Animator`) that:
+    *   Holds a map of `std::string` (animation name) to `AnimationClip`.
+    *   Tracks the currently playing `AnimationClip`, current frame index, and time elapsed on the current frame.
+    *   In its `update(float deltaTime)` method, it advances the animation time. If the current frame's duration is exceeded, it moves to the next frame (handling looping or stopping at the end).
+4.  **Integration with Sprite:** The `Animator` updates a target `Sprite` component (or directly provides the current `SDL_Rect srcRect` and `SDL_Texture*` to the rendering system). The `Sprite`'s `render` method (or the main rendering loop) then uses this `srcRect`.
 
-### How to Code and Develop
+### Code Example (C++/SDL2)
 
-1.  **Define Frame Data:** Specify the region (rectangle) of the sprite sheet that corresponds to each frame.
-2.  **Animation Clip Class:** Create a class to store a list of frames, frame duration(s), and whether the animation should loop.
-3.  **Animator Component:**
-    *   Holds a reference to the current animation clip.
-    *   Tracks the current playback time and current frame index.
-    *   Updates the displayed frame of a sprite based on the elapsed time.
-4.  **Integration with Sprite Renderer:** The Animator tells the Sprite Renderer which part of the sprite sheet (which frame) to draw by updating the `source_rect` of the `Sprite` object.
+**`Animation.h` (Conceptual)**
+```cpp
+// Animation.h
+#pragma once
+#include <SDL.h>
+#include <vector>
+#include <string>
+#include <map>
 
-### Code Example (Sprite Sheet Animation)
+struct AnimationFrame {
+    SDL_Rect sourceRect; // Rectangle on the sprite sheet
+    float duration;      // How long this frame stays (in seconds)
+};
 
-```python
-class AnimationFrame:
-    def __init__(self, texture_source_rect, duration):
-        # texture_source_rect: (x, y, width, height) on the sprite sheet
-        self.texture_source_rect = texture_source_rect
-        self.duration = duration # in seconds
+struct AnimationClip {
+    std.string name;
+    SDL_Texture* spriteSheet = nullptr;
+    std::vector<AnimationFrame> frames;
+    bool loop = true;
+    float totalDuration = 0.0f;
 
-class AnimationClip:
-    def __init__(self, name, frames, loop=True):
-        self.name = name
-        self.frames = frames # List of AnimationFrame objects
-        self.loop = loop
-        self.total_duration = sum(frame.duration for frame in frames)
-        if self.total_duration <= 0 and self.frames: # Handle zero duration animations
-            self.total_duration = 0.0001 # a tiny duration to prevent division by zero
+    AnimationClip(std::string n, SDL_Texture* sheet, bool l = true)
+        : name(std::move(n)), spriteSheet(sheet), loop(l) {}
 
-class Animator:
-    def __init__(self, sprite_to_animate):
-        self.sprite = sprite_to_animate # The Sprite object this animator controls
-        self.animations = {} # Dictionary of AnimationClip objects, keyed by name
-        self.current_animation_name = None
-        self.current_animation_clip = None
-        self.current_time = 0.0
-        self.current_frame_index = 0
-        self.is_playing = False
+    void addFrame(SDL_Rect srcRect, float duration) {
+        frames.push_back({srcRect, duration});
+        totalDuration += duration;
+    }
+};
 
-    def add_animation(self, clip):
-        self.animations[clip.name] = clip
+class Animator {
+public:
+    Animator() = default;
 
-    def play(self, animation_name):
-        if animation_name in self.animations:
-            new_animation_clip = self.animations[animation_name]
-            if self.current_animation_name != animation_name or not self.is_playing:
-                self.current_animation_name = animation_name
-                self.current_animation_clip = new_animation_clip
-                self.current_time = 0.0
-                self.current_frame_index = 0
-                self.is_playing = True
-                if not self.current_animation_clip.frames: # No frames to play
-                    self.is_playing = False
-                    if self.sprite: self.sprite.source_rect = None # Or some default
-                    return
-                self._update_sprite_texture_rect() # Set initial frame
-        else:
-            print(f"Warning: Animation '{animation_name}' not found.")
+    void addClip(const AnimationClip& clip) {
+        clips[clip.name] = clip;
+    }
 
-    def stop(self):
-        self.is_playing = False
+    void play(const std::string& clipName) {
+        if (clips.count(clipName)) {
+            if (currentClipName != clipName) {
+                currentClip = &clips[clipName];
+                currentClipName = clipName;
+                currentFrameIndex = 0;
+                currentTime = 0.0f;
+                isPlaying = true;
+            } else if (!isPlaying) { // Resume if same clip was paused
+                isPlaying = true;
+            }
+        }
+    }
 
-    def update(self, dt):
-        if not self.is_playing or not self.current_animation_clip or not self.current_animation_clip.frames:
-            return
+    void stop() {
+        isPlaying = false;
+    }
 
-        self.current_time += dt
+    void update(float deltaTime) {
+        if (!isPlaying || !currentClip || currentClip->frames.empty()) {
+            return;
+        }
 
-        # Determine if the animation cycle has completed
-        if self.current_time >= self.current_animation_clip.total_duration:
-            if self.current_animation_clip.loop:
-                self.current_time = self.current_time % self.current_animation_clip.total_duration
-                self.current_frame_index = 0 # Reset to start for loop
-            else:
-                self.is_playing = False
-                # Stay on the last frame
-                self.current_frame_index = len(self.current_animation_clip.frames) - 1
-                self._update_sprite_texture_rect()
-                return # Animation finished
+        currentTime += deltaTime;
 
-        # Find the current frame based on accumulated time
-        time_accumulator = 0.0
-        found_frame = False
-        for i, frame in enumerate(self.current_animation_clip.frames):
-            time_accumulator += frame.duration
-            if self.current_time < time_accumulator:
-                if self.current_frame_index != i:
-                    self.current_frame_index = i
-                    self._update_sprite_texture_rect()
-                found_frame = True
-                break
+        if (currentTime >= currentClip->frames[currentFrameIndex].duration) {
+            currentTime -= currentClip->frames[currentFrameIndex].duration; // Carry over excess time
+            currentFrameIndex++;
 
-        # If, due to large dt or other reasons, we skipped past all frame durations
-        # and it's a looping animation, ensure we are on a valid frame (usually the last one before loop or first)
-        if not found_frame and self.current_animation_clip.loop:
-             # This can happen if total_duration is very small or dt is large
-             # Default to first frame if time reset, or last if something went wrong
-            self.current_frame_index = 0 # Or len(self.current_animation_clip.frames) -1 if time_accumulator was exceeded
-            self._update_sprite_texture_rect()
+            if (currentFrameIndex >= currentClip->frames.size()) {
+                if (currentClip->loop) {
+                    currentFrameIndex = 0;
+                } else {
+                    currentFrameIndex = currentClip->frames.size() - 1; // Stay on last frame
+                    isPlaying = false;
+                }
+            }
+        }
+    }
 
+    // Returns the source rectangle for the current frame of the current animation
+    SDL_Rect getCurrentFrameSourceRect() const {
+        if (isPlaying && currentClip && !currentClip->frames.empty() && currentFrameIndex < currentClip->frames.size()) {
+            return currentClip->frames[currentFrameIndex].sourceRect;
+        }
+        return {0, 0, 0, 0}; // Default empty rect
+    }
 
-    def _update_sprite_texture_rect(self):
-        if self.current_animation_clip and self.sprite and \
-           0 <= self.current_frame_index < len(self.current_animation_clip.frames):
-            current_anim_frame = self.current_animation_clip.frames[self.current_frame_index]
-            self.sprite.source_rect = current_anim_frame.texture_source_rect
-            # print(f"Animator: Playing '{self.current_animation_name}', Frame {self.current_frame_index}, Rect {self.sprite.source_rect}")
-        elif self.sprite:
-             # If no valid animation/frame, maybe clear source_rect or set to a default
-             # self.sprite.source_rect = None
-             pass
+    SDL_Texture* getCurrentTexture() const {
+        if (isPlaying && currentClip) {
+            return currentClip->spriteSheet;
+        }
+        return nullptr;
+    }
+
+    bool IsPlaying() const { return isPlaying; }
+    const std::string& getCurrentClipName() const { return currentClipName; }
 
 
-# Example Usage:
-# (Assumes Sprite class exists and has a `source_rect` attribute used by a SpriteRenderer)
-# (Assumes Texture class exists)
-
-# class Sprite: # Simplified for example
-#     def __init__(self, texture, position=(0,0)):
-#         self.texture = texture
-#         self.position = position
-#         self.source_rect = None # (x, y, w, h) on the texture
-#     def __str__(self): return "Sprite"
-
-# class Texture: # Simplified
-#     def __init__(self, name): self.name = name
-#     def __str__(self): return f"Texture({self.name})"
-
-# player_sprite_sheet = Texture("player_sheet.png")
-# some_sprite = Sprite(player_sprite_sheet)
-
-# walk_frames_data = [
-#     {"rect": (0, 0, 32, 32), "duration": 0.1},
-#     {"rect": (32, 0, 32, 32), "duration": 0.1},
-#     {"rect": (64, 0, 32, 32), "duration": 0.1},
-#     {"rect": (96, 0, 32, 32), "duration": 0.1},
-# ]
-# walk_animation_frames = [AnimationFrame(f["rect"], f["duration"]) for f in walk_frames_data]
-# walk_animation = AnimationClip(name="walk", frames=walk_animation_frames, loop=True)
-
-# idle_frames_data = [
-#     {"rect": (0, 32, 32, 32), "duration": 0.5},
-#     {"rect": (32, 32, 32, 32), "duration": 0.5},
-# ]
-# idle_animation_frames = [AnimationFrame(f["rect"], f["duration"]) for f in idle_frames_data]
-# idle_animation = AnimationClip(name="idle", frames=idle_animation_frames, loop=True)
-
-# animator = Animator(sprite_to_animate=some_sprite)
-# animator.add_animation(walk_animation)
-# animator.add_animation(idle_animation)
-
-# animator.play("walk")
-
-# In game loop:
-# dt = 1.0 / 60.0 # Delta time
-# animator.update(dt)
-# sprite_renderer.render_sprite(some_sprite) # SpriteRenderer uses sprite.source_rect
+private:
+    std::map<std::string, AnimationClip> clips;
+    AnimationClip* currentClip = nullptr;
+    std::string currentClipName;
+    int currentFrameIndex = 0;
+    float currentTime = 0.0f; // Time accumulated for the current frame
+    bool isPlaying = false;
+};
 ```
 
-**Explanation:**
+**Integration with a `GameObject` and `SpriteRenderer` (Conceptual)**
+```cpp
+// class GameObject {
+// public:
+//     Sprite spriteComponent; // From section 1
+//     Animator animatorComponent;
+//     // ... other components like Transform, RigidBody2D
+//
+//     void update(float deltaTime) {
+//         animatorComponent.update(deltaTime);
+//         // Update spriteComponent's srcRect based on animator
+//         if (animatorComponent.IsPlaying()) {
+//             spriteComponent.texture = animatorComponent.getCurrentTexture(); // Ensure sprite uses correct texture
+//             spriteComponent.srcRect = animatorComponent.getCurrentFrameSourceRect();
+//         }
+//         // ... update other components
+//     }
+//
+//     void render(SDL_Renderer* renderer) {
+//         spriteComponent.render(renderer); // Sprite's render uses its own srcRect and texture
+//     }
+// };
 
-*   `AnimationFrame`: Defines a single frame's source rectangle on the sprite sheet and its display duration.
-*   `AnimationClip`: A named collection of `AnimationFrame`s, defining a complete animation (e.g., "walk", "idle") and its looping behavior.
-*   `Animator`: Manages playback. The `play` method starts an animation. The `update` method advances the animation time, determines the correct frame based on frame durations, and updates the `source_rect` property on its target `Sprite`. The `SpriteRenderer` then uses this `source_rect` to draw the correct portion of the sprite sheet.
+// In your setup:
+// SDL_Texture* playerSheet = TextureManager::getInstance().loadTexture("assets/player_spritesheet.png", renderer);
+// AnimationClip walkClip("walk", playerSheet);
+// walkClip.addFrame({0, 0, 32, 64}, 0.1f);   // x, y, w, h on sheet, duration
+// walkClip.addFrame({32, 0, 32, 64}, 0.1f);
+// walkClip.addFrame({64, 0, 32, 64}, 0.1f);
+// // ... add all frames for walk
+//
+// GameObject player;
+// player.animatorComponent.addClip(walkClip);
+// player.animatorComponent.play("walk");
+// player.spriteComponent.texture = playerSheet; // Initial texture for sprite
+// SDL_QueryTexture(playerSheet, nullptr, nullptr, &player.spriteComponent.destRect.w, &player.spriteComponent.destRect.h); // Set initial size
+// player.spriteComponent.destRect.w /= numberOfColumnsInSheet; // Assuming single row sheet, adjust if sprite is smaller than full texture
+// player.spriteComponent.destRect.h /= numberOfRowsInSheet; //
+```
+**Explanation:**
+*   `AnimationFrame`: Holds an `SDL_Rect` for the frame on the sprite sheet and its display `duration`.
+*   `AnimationClip`: Contains a sequence of `AnimationFrame`s, the `SDL_Texture*` for the sprite sheet, and looping behavior.
+*   `Animator`: Manages multiple `AnimationClip`s. The `update` method advances the current animation based on `deltaTime`. `getCurrentFrameSourceRect()` and `getCurrentTexture()` provide the necessary info for rendering.
+*   The `GameObject` would have an `Animator` component. In the `GameObject::update` method, the animator is updated, and then the `Sprite` component's `srcRect` and `texture` are updated from the animator's current state.
 
 ---
 
@@ -461,186 +601,159 @@ class Animator:
 
 ### Conceptual Overview
 
-A Tilemap Renderer is used to efficiently draw game levels composed of a grid of tiles. Each tile is a small, reusable image. Tilemaps are fundamental for 2D games like platformers, RPGs, and strategy games.
+A Tilemap Renderer draws levels composed of a grid of tiles. Each tile is a small image, usually part of a larger tileset texture. This is efficient for creating large 2D game worlds.
 
-Key features:
+### How to Code and Develop (C++/SDL2)
 
-*   **Grid-based:** Levels are defined as a 2D array of tile IDs.
-*   **Tileset:** A texture (similar to a sprite sheet) containing all unique tile images.
-*   **Layers:** Tilemaps often support multiple layers for depth effects (e.g., background, foreground, collision layer).
-*   **Efficiency:** Drawing a large map by rendering individual sprites for each tile would be slow. Tilemap renderers often use techniques like mesh generation or optimized batching.
+1.  **Tileset:**
+    *   Load the tileset image as an `SDL_Texture*`.
+    *   Know the `tileWidth` and `tileHeight`.
+    *   A helper function `getTileSourceRect(int tileID)` can calculate the `SDL_Rect` on the tileset texture for a given tile ID.
+2.  **Map Data:**
+    *   Typically a 2D array (e.g., `std::vector<std::vector<int>>`) storing tile IDs for each grid cell.
+    *   Often supports multiple layers, each being a separate 2D array.
+3.  **TilemapLayer Class:** Store map data, tile dimensions, and visibility for a single layer.
+4.  **TilemapRenderer Class:**
+    *   Manages one or more `TilemapLayer`s and the `Tileset`.
+    *   **Rendering:**
+        *   In its `render(SDL_Renderer* renderer, SDL_Rect camera)` method:
+        *   Determine the range of tiles visible within the `camera` rectangle (culling).
+        *   For each visible tile in each layer:
+            *   Get the `tileID` from the layer's map data.
+            *   If `tileID` represents a valid tile (e.g., > 0):
+                *   Get the `srcRect` from the `Tileset` using `tileID`.
+                *   Calculate the `destRect` on the screen (tile position relative to camera).
+                *   Use `SDL_RenderCopy(renderer, tilesetTexture, &srcRect, &destRect)` to draw the tile.
+5.  **Optimization:** For very large static tilemaps, you could pre-render chunks of the tilemap to separate `SDL_Texture`s. Then, render these chunk textures instead of individual tiles. This is more complex but can significantly improve performance.
 
-### How to Code and Develop
+### Code Example (C++/SDL2)
 
-1.  **Define Tile Data:** Store information about each tile type, such as its source rectangle in the tileset and potentially collision properties.
-2.  **Map Data Structure:** Use a 2D array (or list of lists) to store the tile ID for each cell in the map grid for each layer.
-3.  **Tileset Loading:** Load the tileset texture and understand its tile dimensions.
-4.  **Rendering Logic:**
-    *   Iterate through the visible portion of the tilemap (camera culling is crucial for performance).
-    *   For each visible tile in each layer, get its ID from the map data.
-    *   Look up the tile's source rectangle in the tileset based on its ID.
-    *   Draw that portion of the tileset texture at the correct grid position on the screen, adjusted by camera position.
-5.  **Optimization (Mesh Generation):** For static tilemaps, you can pre-generate a single (or few) large mesh(es) representing the entire map. This mesh consists of quads, each textured with the appropriate tile. This is much faster to render than individual draw calls per tile, as it's a single (or few) draw call(s). Dynamic updates to the mesh can be more complex.
+**`Tileset.h` (Conceptual)**
+```cpp
+// Tileset.h
+#pragma once
+#include <SDL.h>
+#include <string>
+#include <vector> // For storing tile properties if needed
 
-### Code Example (Basic Tilemap Rendering)
+struct TileProperty { // Optional: For tiles with special properties
+    bool isSolid = false;
+    // Add other properties like damage, animation, etc.
+};
 
-```python
-class Tileset:
-    def __init__(self, texture, tile_width, tile_height):
-        self.texture = texture # The Texture object for the tileset image
-        self.tile_width = int(tile_width)
-        self.tile_height = int(tile_height)
+class Tileset {
+public:
+    SDL_Texture* texture = nullptr;
+    int tileWidth = 0;
+    int tileHeight = 0;
+    int columns = 0; // Number of tile columns in the texture
+    int rows = 0;    // Number of tile rows in the texture
 
-        if not texture or self.tile_width <= 0 or self.tile_height <= 0:
-            self.columns = 0
-            self.rows = 0
-            print("Warning: Tileset texture is invalid or tile dimensions are non-positive.")
-            return
+    // std::vector<TileProperty> tileProperties; // Optional
 
-        self.columns = texture.width // self.tile_width
-        self.rows = texture.height // self.tile_height
+    Tileset(SDL_Texture* tex, int tW, int tH) : texture(tex), tileWidth(tW), tileHeight(tH) {
+        if (texture && tileWidth > 0 && tileHeight > 0) {
+            int totalWidth, totalHeight;
+            SDL_QueryTexture(texture, nullptr, nullptr, &totalWidth, &totalHeight);
+            columns = totalWidth / tileWidth;
+            rows = totalHeight / tileHeight;
+            // Initialize tileProperties if used
+            // tileProperties.resize(columns * rows + 1); // +1 if using 1-based indexing for tile IDs
+        }
+    }
 
-    def get_tile_source_rect(self, tile_id):
-        if tile_id <= 0 or self.columns == 0: # Assuming 0 or negative is an empty tile, or invalid tileset
-            return None
-        # Tile IDs are often 1-indexed in map editors.
-        # Convert to 0-indexed for calculation.
-        idx = tile_id - 1
+    SDL_Rect getSourceRectForTileID(int tileID) const {
+        if (tileID <= 0 || columns == 0) return {0, 0, 0, 0}; // Assuming 0 or less is empty/invalid
 
-        col = idx % self.columns
-        row = idx // self.columns
+        int id_zero_based = tileID - 1; // If tileIDs are 1-based from map editor
+        int tileX = (id_zero_based % columns) * tileWidth;
+        int tileY = (id_zero_based / columns) * tileHeight;
 
-        if row >= self.rows: # tile_id is out of bounds for this tileset
-            return None
-
-        return (col * self.tile_width, row * self.tile_height, self.tile_width, self.tile_height)
-
-class TilemapLayer:
-    def __init__(self, map_data, tile_width, tile_height, name="default_layer", visible=True):
-        # map_data: 2D list of tile IDs, e.g., [[1, 2, 1], [3, 0, 3]]
-        self.map_data = map_data
-        self.tile_width = int(tile_width)
-        self.tile_height = int(tile_height)
-        self.name = name
-        self.visible = visible
-
-        self.rows = len(map_data)
-        self.cols = len(map_data[0]) if self.rows > 0 else 0
-
-class TilemapRenderer:
-    def __init__(self, graphics_api, tileset):
-        self.graphics_api = graphics_api # Hypothetical graphics API
-        self.tileset = tileset
-        self.layers = [] # List of TilemapLayer objects, ordered by rendering
-
-    def add_layer(self, layer):
-        if not isinstance(layer, TilemapLayer):
-            print("Error: Attempted to add non-TilemapLayer object to TilemapRenderer.")
-            return
-        self.layers.append(layer)
-
-    def render(self, camera_x, camera_y):
-        if not self.tileset or not self.tileset.texture:
-            # print("TilemapRenderer: No valid tileset to render.")
-            return
-
-        # Basic culling: determine visible tile range (simplified)
-        # Assumes graphics_api has screen_width/height attributes
-        screen_width_in_tiles = (self.graphics_api.screen_width // self.tileset.tile_width) + 2
-        screen_height_in_tiles = (self.graphics_api.screen_height // self.tileset.tile_height) + 2
-
-        start_col_world = int(camera_x // self.tileset.tile_width)
-        start_row_world = int(camera_y // self.tileset.tile_height)
-
-        end_col_world = start_col_world + screen_width_in_tiles
-        end_row_world = start_row_world + screen_height_in_tiles
-
-
-        for layer in self.layers:
-            if not layer.visible or not layer.map_data:
-                continue
-
-            # Clamp rendering to the actual layer dimensions
-            render_start_row = max(0, start_row_world)
-            render_end_row = min(layer.rows, end_row_world)
-            render_start_col = max(0, start_col_world)
-            render_end_col = min(layer.cols, end_col_world)
-
-            for r in range(render_start_row, render_end_row):
-                for c in range(render_start_col, render_end_col):
-                    tile_id = 0
-                    try:
-                        tile_id = layer.map_data[r][c]
-                    except IndexError:
-                        # This can happen if map_data is not rectangular or culling logic is off
-                        # print(f"Warning: Tile index out of bounds at layer {layer.name}, row {r}, col {c}")
-                        continue
-
-                    if tile_id > 0: # Skip empty tiles (assuming 0 or less is empty)
-                        source_rect = self.tileset.get_tile_source_rect(tile_id)
-                        if source_rect:
-                            # Calculate tile's position on screen
-                            screen_pos_x = c * self.tileset.tile_width - camera_x
-                            screen_pos_y = r * self.tileset.tile_height - camera_y
-
-                            # The graphics_api.draw_texture_part would take the main texture,
-                            # the destination rect on screen (x, y, w, h), and the source_rect from the texture.
-                            self.graphics_api.draw_texture_part(
-                                self.tileset.texture,
-                                (screen_pos_x, screen_pos_y, self.tileset.tile_width, self.tileset.tile_height), # Destination rect on screen
-                                source_rect  # Source rect from tileset (x, y, w, h)
-                            )
-
-# Example Usage (Conceptual - requires a graphics_api with screen_width/height and draw_texture_part)
-# class Texture: # Simplified
-#     def __init__(self, name, width=0, height=0):
-#         self.name = name
-#         self.image_data = f"Image data for {name}"
-#         self.width = width
-#         self.height = height
-
-# class HypotheticalGraphicsAPI:
-#     def __init__(self):
-#         self.screen_width = 800
-#         self.screen_height = 600
-#     def draw_texture_part(self, texture, dest_rect_on_screen, source_rect_from_texture):
-#         # dest_rect_on_screen: (screen_x, screen_y, width, height)
-#         # source_rect_from_texture: (tex_x, tex_y, tex_width, tex_height)
-#         print(f"Drawing part of '{texture.image_data}' from {source_rect_from_texture} to screen at {dest_rect_on_screen}")
-
-# # Assume tileset.png is 64x32, containing two 32x32 tiles side-by-side.
-# tileset_texture = Texture("tileset.png", width=64, height=32)
-
-# my_tileset = Tileset(tileset_texture, tile_width=32, tile_height=32)
-
-# # Tile ID 1 is the first tile (0,0) in tileset.png, Tile ID 2 is the second (32,0)
-# map_level_1_data = [
-#     [1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1], # Example of a wider map
-#     [1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-#     [1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-#     [1, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1],
-# ]
-# layer1 = TilemapLayer(map_level_1_data, my_tileset.tile_width, my_tileset.tile_height, name="Foreground")
-
-# graphics = HypotheticalGraphicsAPI()
-# tilemap_renderer = TilemapRenderer(graphics, my_tileset)
-# tilemap_renderer.add_layer(layer1)
-
-# In game loop:
-# camera_x_world, camera_y_world = 0, 0 # Top-left of the camera's view in world coordinates
-# tilemap_renderer.render(camera_x_world, camera_y_world)
-# After a few seconds, move camera:
-# camera_x_world, camera_y_world = 32, 0
-# tilemap_renderer.render(camera_x_world, camera_y_world)
+        return {tileX, tileY, tileWidth, tileHeight};
+    }
+};
 ```
 
-**Explanation:**
+**`TilemapLayer.h` (Conceptual)**
+```cpp
+// TilemapLayer.h
+#pragma once
+#include <vector>
+#include <SDL_rect.h> // For SDL_Rect
 
-*   `Tileset`: Manages the tileset texture and provides `get_tile_source_rect(tile_id)` to find a tile's image on the sheet. It now includes basic validation.
-*   `TilemapLayer`: Holds the 2D grid of tile IDs for a single layer, along with its visibility and name.
-*   `TilemapRenderer`: Iterates through its `layers`. For each visible layer, it calculates which tiles are within the camera's view (culling). For each such tile, it gets its source rectangle from the `Tileset` and instructs the `graphics_api` to draw that specific part of the tileset texture at the calculated screen position.
-*   `camera_x`, `camera_y`: Represent the top-left coordinates of the camera's viewport in world space.
-*   The `graphics_api.draw_texture_part` method is key: it draws a specific rectangular portion of a source texture to a specific rectangular area on the screen.
+class TilemapLayer {
+public:
+    std::vector<std::vector<int>> mapData; // Tile IDs
+    int tileWidth = 0;
+    int tileHeight = 0;
+    bool isVisible = true;
+
+    TilemapLayer(int tW, int tH, const std::vector<std::vector<int>>& data)
+        : mapData(data), tileWidth(tW), tileHeight(tH) {}
+
+    int getTileID(int col, int row) const {
+        if (row >= 0 && row < mapData.size() && col >= 0 && col < mapData[row].size()) {
+            return mapData[row][col];
+        }
+        return 0; // Return 0 for out-of-bounds (empty tile)
+    }
+
+    int getNumRows() const { return mapData.size(); }
+    int getNumCols() const { return (mapData.empty() ? 0 : mapData[0].size()); }
+};
+```
+
+**`TilemapRenderer.cpp` (Conceptual Render Method)**
+```cpp
+// Part of a TilemapRenderer class or Game class
+// void TilemapRenderer::render(SDL_Renderer* sdlRenderer, const Tileset& tileset, const TilemapLayer& layer, const SDL_Rect& camera) {
+//     if (!layer.isVisible || !tileset.texture || tileset.tileWidth == 0 || tileset.tileHeight == 0) {
+//         return;
+//     }
+
+//     // Determine the range of tiles to draw based on camera
+//     // Start column/row of tiles to render
+//     int startCol = camera.x / tileset.tileWidth;
+//     int startRow = camera.y / tileset.tileHeight;
+
+//     // End column/row (add 1 or 2 for partially visible tiles and rounding)
+//     int endCol = (camera.x + camera.w) / tileset.tileWidth + 1;
+//     int endRow = (camera.y + camera.h) / tileset.tileHeight + 1;
+
+//     // Clamp to map boundaries
+//     startCol = std::max(0, startCol);
+//     startRow = std::max(0, startRow);
+//     endCol = std::min(endCol, layer.getNumCols());
+//     endRow = std::min(endRow, layer.getNumRows());
+
+//     for (int r = startRow; r < endRow; ++r) {
+//         for (int c = startCol; c < endCol; ++c) {
+//             int tileID = layer.getTileID(c, r);
+
+//             if (tileID > 0) { // Assuming 0 or less is an empty tile
+//                 SDL_Rect srcRect = tileset.getSourceRectForTileID(tileID);
+
+//                 SDL_Rect destRect;
+//                 destRect.x = c * tileset.tileWidth - camera.x;
+//                 destRect.y = r * tileset.tileHeight - camera.y;
+//                 destRect.w = tileset.tileWidth;
+//                 destRect.h = tileset.tileHeight;
+
+//                 SDL_RenderCopy(sdlRenderer, tileset.texture, &srcRect, &destRect);
+//             }
+//         }
+//     }
+// }
+```
+**Explanation:**
+*   `Tileset`: Holds the `SDL_Texture` for the tileset image and tile dimensions. `getSourceRectForTileID` calculates the source rectangle for a given tile ID.
+*   `TilemapLayer`: Contains the 2D grid (`mapData`) of tile IDs.
+*   **Rendering Logic**:
+    *   The conceptual `render` method takes the SDL renderer, `Tileset`, `TilemapLayer`, and a `camera` rectangle.
+    *   It calculates `startCol`, `startRow`, `endCol`, `endRow` to determine which tiles are visible in the camera view (culling).
+    *   It iterates over these visible tiles. For each valid `tileID`, it gets the `srcRect` from the `Tileset` and calculates the `destRect` on the screen (adjusting for camera position).
+    *   `SDL_RenderCopy` draws the tile.
+*   **Camera**: The `SDL_Rect camera` would represent the viewport's position and size in world coordinates.
 
 ---
 
@@ -648,239 +761,166 @@ class TilemapRenderer:
 
 ### Conceptual Overview
 
-Collision Handling involves two main parts:
+Collision handling involves detecting if and where objects (colliders) intersect, and then responding appropriately (e.g., stopping movement, triggering events, applying damage).
 
-1.  **Collision Detection:** Determining if, when, and where two or more game objects (colliders) intersect.
-2.  **Collision Response:** Deciding how objects react physically and logically to a collision.
+### How to Code and Develop (C++/SDL2)
 
-Common collider shapes in 2D:
+1.  **Collider Shapes:**
+    *   **AABB (Axis-Aligned Bounding Box):** `SDL_Rect` is perfect for this. Store it as part of your game entity or a collider component.
+    *   **Circles:** Store center (`Vec2D`) and radius (`float`).
+2.  **Collider Component:** A class/struct (e.g., `ColliderComponent`) attached to game entities. It would store:
+    *   The shape type (AABB, Circle).
+    *   The shape's data (e.g., `SDL_Rect` for AABB, or center/radius for circle).
+    *   A pointer or reference to its owner entity.
+    *   Collision layer/mask bits for filtering collisions.
+    *   Callback functions or an event dispatch mechanism for collision events (`onCollisionEnter`, `onCollisionStay`, `onCollisionExit`).
+3.  **Collision Detection Algorithms:**
+    *   **AABB vs. AABB:** `SDL_HasIntersection(&rectA, &rectB)` is a built-in SDL function.
+    *   **Circle vs. Circle:** `distance = sqrt((c1.x-c2.x)^2 + (c1.y-c2.y)^2); return distance < (r1+r2);`
+    *   **AABB vs. Circle:** More complex, often involves finding the closest point on the AABB to the circle's center.
+4.  **Collision System/Manager:**
+    *   Manages all active `ColliderComponent`s.
+    *   In its `update()` method, it checks for collisions between relevant pairs of colliders (potentially optimized using spatial partitioning like a quadtree for large numbers of objects).
+    *   When a collision is detected, it triggers the appropriate response (e.g., calls the owner's callback function, dispatches an event).
+5.  **Collision Response:**
+    *   **Physical:** Adjust positions to prevent overlap (penetration resolution), change velocities (e.g., for bouncing, using restitution from physics components).
+    *   **Logical:** Trigger game logic (damage, item pickup, etc.).
 
-*   **Axis-Aligned Bounding Box (AABB):** Rectangles whose sides are aligned with the X and Y axes. Simple and fast for detection.
-*   **Circle (Sphere in 3D):** Defined by a center point and radius.
-*   **Polygon:** More complex shapes defined by a series of vertices.
-*   **Pixel-Perfect:** Comparing actual sprite pixels (can be slow, used sparingly or as a final check after broader phase detection).
+### Code Example (C++ with SDL_Rect for AABB)
 
-### How to Code and Develop
+**`ColliderComponent.h` (Conceptual)**
+```cpp
+// ColliderComponent.h
+#pragma once
+#include <SDL.h>
+#include <string>
+#include <functional> // For std::function
 
-1.  **Collider Components:** Attach collider components (e.g., `AABBCollider`, `CircleCollider`) to game objects. These components define the shape and size of the object's collision bounds and usually hold a reference to their owner.
-2.  **Collision Detection Algorithms:**
-    *   **AABB vs. AABB:**
-        ```
-        bool checkAABB(rectA, rectB) {
-            return rectA.x < rectB.x + rectB.width &&
-                   rectA.x + rectA.width > rectB.x &&
-                   rectA.y < rectB.y + rectB.height &&
-                   rectA.y + rectA.height > rectB.y;
+class Entity; // Forward declaration for owner
+
+enum class ColliderType { AABB, CIRCLE /*, POLYGON */ };
+
+struct ColliderComponent {
+    Entity* owner = nullptr; // Owner of this collider
+    SDL_Rect box;            // For AABB type
+    // Vec2D circleCenter;   // For Circle type (relative to owner's position)
+    // float circleRadius;   // For Circle type
+    ColliderType type = ColliderType::AABB;
+    std::string tag;       // E.g., "player", "enemy", "bullet", "wall"
+    bool isStatic = false;   // Static colliders don't move or get resolved against other static ones
+    bool isTrigger = false;  // Triggers detect collision but don't cause physical response
+
+    // Callbacks (can be replaced with a more robust event system)
+    std::function<void(ColliderComponent* other)> onCollisionEnter;
+    std::function<void(ColliderComponent* other)> onCollisionStay;
+    std::function<void(ColliderComponent* other)> onCollisionExit;
+
+
+    ColliderComponent(Entity* o, int x, int y, int w, int h, std::string t = "", bool stat = false, bool trig = false)
+        : owner(o), box({x, y, w, h}), tag(std::move(t)), isStatic(stat), isTrigger(trig), type(ColliderType::AABB) {}
+
+    // Update collider position based on owner's transform
+    // void updatePosition(int ownerX, int ownerY) {
+    //     box.x = ownerX + relativeOffsetX; // Assuming box stores relative offset or is updated directly
+    //     box.y = ownerY + relativeOffsetY;
+    // }
+
+    bool checkCollision(const ColliderComponent& other) const {
+        if (type == ColliderType::AABB && other.type == ColliderType::AABB) {
+            return SDL_HasIntersection(&box, &other.box) == SDL_TRUE;
         }
-        ```
-    *   **Circle vs. Circle:**
-        ```
-        bool checkCircle(circleA, circleB) {
-            float dx = circleA.center.x - circleB.center.x;
-            float dy = circleA.center.y - circleB.center.y;
-            float distanceSq = dx*dx + dy*dy;
-            float radiiSum = circleA.radius + circleB.radius;
-            return distanceSq < radiiSum * radiiSum;
-        }
-        ```
-    *   More complex shapes often use algorithms like the Separating Axis Theorem (SAT).
-3.  **Spatial Partitioning (Optimization):** For games with many objects, checking every pair of objects for collision (O(n^2)) is too slow. Spatial partitioning techniques (e.g., Quadtrees, Grids, Spatial Hashing) divide the game world into regions to quickly narrow down potential collision pairs.
-4.  **Collision Response:**
-    *   **Physical:** If using a physics engine, this often involves calculating impulse forces to make objects bounce or stop, and resolving interpenetration (moving objects apart so they no longer overlap).
-    *   **Logical:** Trigger game events (e.g., player takes damage, picks up item, door opens). This is often handled via an event system or callbacks.
-5.  **Event System:** When a collision is detected, an event can be dispatched (e.g., `OnCollisionEnter`, `OnCollisionStay`, `OnCollisionExit`) that other game systems or the involved objects can listen and react to.
-
-### Code Example (Simple AABB Collision Detection and Event-like Callbacks)
-
-```python
-class AABBCollider:
-    def __init__(self, x, y, width, height, owner=None, is_static=False, tag=None):
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.owner = owner # The game object this collider belongs to
-        self.is_static = is_static # Static colliders don't move or get resolved
-        self.tag = tag # For identifying types of colliders (e.g., "player", "enemy", "bullet")
-
-    def update_position(self, x, y):
-        self.x = x
-        self.y = y
-
-    def get_rect(self):
-        return (self.x, self.y, self.width, self.height)
-
-    def intersects(self, other_collider):
-        if not isinstance(other_collider, AABBCollider):
-            # Could add checks for other collider types here (e.g., CircleCollider)
-            return False
-
-        rect_a = self.get_rect()
-        rect_b = other_collider.get_rect()
-
-        # AABB intersection check
-        return (rect_a[0] < rect_b[0] + rect_b[2] and # rectA.x < rectB.x + rectB.width
-                rect_a[0] + rect_a[2] > rect_b[0] and # rectA.x + rectA.width > rectB.x
-                rect_a[1] < rect_b[1] + rect_b[3] and # rectA.y < rectB.y + rectB.height
-                rect_a[1] + rect_a[3] > rect_b[1])    # rectA.y + rectA.height > rectB.y
-
-class CollisionSystem:
-    def __init__(self):
-        self.colliders = []
-        # For tracking ongoing collisions to manage OnCollisionEnter/Stay/Exit
-        self.active_collision_pairs = set() # Stores frozensets of (id(collider_a), id(collider_b))
-
-    def add_collider(self, collider):
-        if collider not in self.colliders:
-            self.colliders.append(collider)
-
-    def remove_collider(self, collider):
-        if collider in self.colliders:
-            self.colliders.remove(collider)
-        # Clean up from active_collision_pairs if it was involved
-        pairs_to_remove = set()
-        for pair_ids in self.active_collision_pairs:
-            if id(collider) in pair_ids:
-                pairs_to_remove.add(pair_ids)
-        self.active_collision_pairs.difference_update(pairs_to_remove)
-
-
-    def check_collisions(self):
-        # Naive N^2 check. For many objects, use spatial partitioning (Quadtree, etc.)
-        current_frame_collision_pairs = set()
-
-        for i in range(len(self.colliders)):
-            for j in range(i + 1, len(self.colliders)):
-                collider_a = self.colliders[i]
-                collider_b = self.colliders[j]
-
-                # Skip check if both are static
-                if collider_a.is_static and collider_b.is_static:
-                    continue
-
-                if collider_a.intersects(collider_b):
-                    # Use frozenset of object ids to make the pair order-independent and hashable
-                    collision_pair_ids = frozenset((id(collider_a), id(collider_b)))
-                    current_frame_collision_pairs.add(collision_pair_ids)
-
-                    if collision_pair_ids not in self.active_collision_pairs:
-                        # New collision: OnCollisionEnter
-                        self._dispatch_event(collider_a, collider_b, "on_collision_enter")
-                        self._dispatch_event(collider_b, collider_a, "on_collision_enter")
-                    else:
-                        # Ongoing collision: OnCollisionStay
-                        self._dispatch_event(collider_a, collider_b, "on_collision_stay")
-                        self._dispatch_event(collider_b, collider_a, "on_collision_stay")
-
-        # Check for collisions that ended (OnCollisionExit)
-        exited_collision_pairs = self.active_collision_pairs - current_frame_collision_pairs
-        for pair_ids in exited_collision_pairs:
-            # Need to retrieve the actual collider objects from their IDs or store them differently.
-            # This part is tricky if colliders can be removed. A safer way is to store actual collider pairs.
-            # For simplicity, this example assumes colliders are persistent enough for this frame.
-            # A more robust solution might involve looking up colliders by ID from a central registry.
-            # This is a known challenge in such event systems.
-            # Let's assume we can find them for the event dispatch (conceptual)
-            # This part requires a way to get colliders from IDs stored in pair_ids, which is not directly implemented here.
-            # For a real system, you might store (collider_a, collider_b) tuples directly if performance allows,
-            # or use a mapping from ID back to object.
-            # Simplified: if you stored actual collider objects in pairs, you'd use those.
-            # For this example, we'll just acknowledge the event conceptually.
-            # print(f"Exit event for pair {pair_ids} - actual objects needed for dispatch")
-            # To properly dispatch exit, you'd need to find the colliders that correspond to pair_ids
-            # This is a simplification:
-            # Find colliders involved in the exited pair to dispatch events to their owners
-            # This lookup is not robust if colliders are frequently added/removed.
-            collider_a_exit, collider_b_exit = None, None
-            id_list = list(pair_ids)
-            for c in self.colliders: # This is inefficient; better to have a map id->collider
-                if id(c) == id_list[0]: collider_a_exit = c
-                elif id(c) == id_list[1]: collider_b_exit = c
-                if collider_a_exit and collider_b_exit: break
-
-            if collider_a_exit and collider_b_exit:
-                 self._dispatch_event(collider_a_exit, collider_b_exit, "on_collision_exit")
-                 self._dispatch_event(collider_b_exit, collider_a_exit, "on_collision_exit")
-
-
-        self.active_collision_pairs = current_frame_collision_pairs
-
-    def _dispatch_event(self, collider_1, collider_2, event_method_name):
-        if collider_1.owner and hasattr(collider_1.owner, event_method_name):
-            method = getattr(collider_1.owner, event_method_name)
-            method(collider_2) # Pass the other collider involved
-
-# Example Usage:
-# class GameObject: # Base class for things that can collide
-#     def __init__(self, name, x, y, w, h, is_static=False, tag=None):
-#         self.name = name
-#         self.x, self.y = x, y
-#         self.collider = AABBCollider(x, y, w, h, owner=self, is_static=is_static, tag=tag)
-
-#     def update_position(self, new_x, new_y): # Call this when game object moves
-#         self.x, self.y = new_x, new_y
-#         self.collider.update_position(new_x, new_y)
-
-#     def on_collision_enter(self, other_collider):
-#         print(f"ENTER: {self.name} (tag: {self.collider.tag}) collided with {other_collider.owner.name} (tag: {other_collider.tag})")
-
-#     def on_collision_stay(self, other_collider):
-#         # print(f"STAY: {self.name} is still colliding with {other_collider.owner.name}")
-#         pass
-
-#     def on_collision_exit(self, other_collider):
-#         print(f"EXIT: {self.name} no longer colliding with {other_collider.owner.name}")
-
-# player = GameObject("Player", 50, 50, 32, 32, tag="player")
-# wall = GameObject("Wall", 100, 50, 20, 100, is_static=True, tag="environment")
-# enemy = GameObject("Enemy", 60, 60, 24, 24, tag="enemy")
-
-# collision_sys = CollisionSystem()
-# collision_sys.add_collider(player.collider)
-# collision_sys.add_collider(wall.collider)
-# collision_sys.add_collider(enemy.collider)
-
-# In game loop (conceptual):
-# frame_count = 0
-# while frame_count < 5:
-#     print(f"\n--- Frame {frame_count} ---")
-#     # Simulate player movement causing different collision states
-#     if frame_count == 0: # Initial state, player might be colliding with enemy
-#         player.update_position(player.x, player.y) # No move, just check initial
-#     if frame_count == 1: # Player moves into wall
-#         player.update_position(90, 50)
-#     elif frame_count == 2: # Player stays in wall
-#         player.update_position(90, 50)
-#     elif frame_count == 3: # Player moves away from wall and enemy
-#         player.update_position(10, 10)
-#     elif frame_count == 4: # Player stays away
-#         player.update_position(10,10)
-
-#     # Update enemy position if it moves
-#     # enemy.update_position(enemy.x + 1, enemy.y)
-
-#     collision_sys.check_collisions()
-#     frame_count += 1
+        // Add checks for other types (Circle vs Circle, AABB vs Circle)
+        return false;
+    }
+};
 ```
 
-**Explanation:**
+**`CollisionSystem.h` (Conceptual - Naive N^2 Check)**
+```cpp
+// CollisionSystem.h
+#pragma once
+#include <vector>
+#include <set>
+#include "ColliderComponent.h" // Assuming ColliderComponent is defined
 
-*   `AABBCollider`: Represents an axis-aligned bounding box. It stores its dimensions, position (which should be updated when its owner moves), a reference to its `owner` game object, an `is_static` flag, and a `tag`. The `intersects` method checks for overlap with another `AABBCollider`.
+class CollisionSystem {
+public:
+    void addCollider(ColliderComponent* collider) {
+        colliders.push_back(collider);
+    }
+
+    void removeCollider(ColliderComponent* collider) {
+        // Efficiently remove (e.g., swap with last and pop, or use std::remove_if)
+        // For simplicity:
+        colliders.erase(std::remove(colliders.begin(), colliders.end(), collider), colliders.end());
+        // Also need to clean up from activeCollisionPairs
+        // ... (implementation for cleaning activeCollisionPairs is more involved)
+    }
+
+    void update() {
+        std::set<std::pair<ColliderComponent*, ColliderComponent*>> currentFrameCollisions;
+
+        for (size_t i = 0; i < colliders.size(); ++i) {
+            for (size_t j = i + 1; j < colliders.size(); ++j) {
+                ColliderComponent* colA = colliders[i];
+                ColliderComponent* colB = colliders[j];
+
+                if (colA->isStatic && colB->isStatic) continue; // Skip static-static
+
+                if (colA->checkCollision(*colB)) {
+                    // Ensure consistent ordering for pair to store in set
+                    std::pair<ColliderComponent*, ColliderComponent*> pair =
+                        (colA < colB) ? std::make_pair(colA, colB) : std::make_pair(colB, colA);
+
+                    currentFrameCollisions.insert(pair);
+
+                    if (activeCollisionPairs.find(pair) == activeCollisionPairs.end()) {
+                        // New collision: OnCollisionEnter
+                        if (colA->onCollisionEnter) colA->onCollisionEnter(colB);
+                        if (colB->onCollisionEnter) colB->onCollisionEnter(colA);
+                    } else {
+                        // Ongoing collision: OnCollisionStay
+                        if (colA->onCollisionStay) colA->onCollisionStay(colB);
+                        if (colB->onCollisionStay) colB->onCollisionStay(colA);
+                    }
+                }
+            }
+        }
+
+        // Check for OnCollisionExit
+        // Iterate through previously active pairs and see if they are still active
+        std::vector<std::pair<ColliderComponent*, ColliderComponent*>> toRemove;
+        for (const auto& activePair : activeCollisionPairs) {
+            if (currentFrameCollisions.find(activePair) == currentFrameCollisions.end()) {
+                // This pair is no longer colliding
+                if (activePair.first->onCollisionExit) activePair.first->onCollisionExit(activePair.second);
+                if (activePair.second->onCollisionExit) activePair.second->onCollisionExit(activePair.first);
+                // Mark for removal from activeCollisionPairs (can't modify while iterating directly for some set impls)
+                // This part needs careful handling if colliders can be destroyed.
+            }
+        }
+        // A simpler way for exit is to build a list of exited pairs then iterate that.
+        // std::set_difference can be used if pairs are consistently ordered and comparable.
+
+        activeCollisionPairs = currentFrameCollisions;
+    }
+
+private:
+    std::vector<ColliderComponent*> colliders; // Consider smart pointers for ownership
+    // Stores pairs of colliders that are currently colliding
+    std::set<std::pair<ColliderComponent*, ColliderComponent*>> activeCollisionPairs;
+};
+```
+**Explanation:**
+*   `ColliderComponent`: Stores an `SDL_Rect` for AABB, an owner, a tag, and flags like `isStatic` or `isTrigger`. It includes `std::function` members for callbacks.
 *   `CollisionSystem`:
-    *   `colliders`: A list of all active colliders in the scene.
-    *   `active_collision_pairs`: A set used to track which pairs of colliders were intersecting in the *previous* frame. This is essential for distinguishing between `OnCollisionEnter` (was not colliding, now is), `OnCollisionStay` (was colliding, still is), and `OnCollisionExit` (was colliding, now is not).
-    *   `check_collisions()`:
-        *   Iterates through all unique pairs of colliders (naive O(n^2) approach).
-        *   Skips static-vs-static checks.
-        *   If an intersection occurs:
-            *   It creates a `collision_pair_ids` (a `frozenset` of the `id()`s of the two colliders, making the pair order-independent and hashable for set operations).
-            *   This pair is added to `current_frame_collision_pairs`.
-            *   If this pair was *not* in `active_collision_pairs` (from the previous frame), it's an `OnCollisionEnter` event.
-            *   If it *was* in `active_collision_pairs`, it's an `OnCollisionStay` event.
-        *   After checking all pairs, `exited_collision_pairs` are determined by finding pairs in `active_collision_pairs` that are *not* in `current_frame_collision_pairs`. These trigger `OnCollisionExit`.
-        *   Finally, `active_collision_pairs` is updated to `current_frame_collision_pairs` for the next frame's comparison.
-    *   `_dispatch_event()`: Calls a specific method (e.g., `on_collision_enter`) on the `owner` of the collider, passing the *other* collider involved in the collision.
-*   **Important:** For physics-based responses (like stopping movement or bouncing), this detection should ideally occur *before* an object visually moves into another, or you need penetration resolution algorithms. This example focuses on the detection and event dispatching logic. The exit event dispatch has known complexities regarding retrieving objects from IDs if objects are frequently destroyed.
+    *   Manages a list of `ColliderComponent*`.
+    *   `update()`: Performs a naive N^2 check. For each pair that collides:
+        *   It determines if it's a new collision (`OnCollisionEnter`) or an ongoing one (`OnCollisionStay`) by comparing with `activeCollisionPairs` from the previous frame.
+        *   It then calls the respective callback functions on the owners.
+        *   Detecting `OnCollisionExit` involves finding pairs that were in `activeCollisionPairs` but are not in `currentFrameCollisions`.
+*   **Spatial Partitioning**: For games with many colliders, a naive N^2 check is too slow. Techniques like Quadtrees (for 2D) are used to divide the space and only check objects in nearby regions.
+*   **Entity Class**: The `Entity* owner` implies you have some form of game object or entity class that these components belong to.
 
 ---
 
@@ -888,201 +928,221 @@ class CollisionSystem:
 
 ### Conceptual Overview
 
-An Audio Player system handles the playback of sound effects (SFX) and background music (BGM) in a game.
+An Audio Player system manages loading and playback of sound effects (SFX) and background music (BGM) using SDL_mixer.
 
-Key features:
+### How to Code and Develop (C++/SDL_mixer)
 
-*   **Loading Audio Files:** Supports various audio formats (e.g., WAV for uncompressed SFX, MP3/OGG for compressed BGM).
-*   **Playing Sounds:** Ability to play sounds once, loop them, or play multiple sounds simultaneously (polyphony).
-*   **Volume Control:** Global volume, per-sound volume, and potentially per-category (SFX, Music, UI) volume.
-*   **Panning:** Positioning sounds in a stereo (or 3D) soundscape (more advanced).
-*   **Streaming:** For long audio files like BGM, stream them from disk rather than loading the entire file into memory.
-*   **Channels/Sources:** Manage available audio channels to play multiple sounds.
+1.  **Initialize SDL_mixer:** Call `Mix_OpenAudio(frequency, format, channels, chunksize)` early in your game's initialization. `frequency` (e.g., 44100 Hz), `format` (e.g., `MIX_DEFAULT_FORMAT`), `channels` (2 for stereo), `chunksize` (e.g., 2048 or 4096).
+2.  **Resource Management:**
+    *   **SFX:** Load sound effects as `Mix_Chunk*` using `Mix_LoadWAV("path/to/sfx.wav")`. Store these in a map (e.g., `std::map<std::string, Mix_Chunk*>`) to cache them. Free them with `Mix_FreeChunk()`.
+    *   **BGM:** Load music as `Mix_Music*` using `Mix_LoadMUS("path/to/music.mp3")`. Typically, only one BGM track is loaded/played at a time. Free with `Mix_FreeMusic()`.
+3.  **AudioPlayer Class:**
+    *   Wraps SDL_mixer functions.
+    *   Methods: `loadSFX(id, path)`, `loadMusic(id, path)`, `playSFX(id, loops, channel)`, `playMusic(id, loops)`, `stopMusic()`, `setSFXVolume(volume)`, `setMusicVolume(volume)`.
+    *   Volume: `Mix_VolumeChunk(chunk, volume)` (0-128), `Mix_VolumeMusic(volume)` (0-128).
+4.  **Playing Sounds:**
+    *   **SFX:** `Mix_PlayChannel(-1, chunk, loops)` plays a `Mix_Chunk`. `-1` finds the first available channel. `loops` is 0 for once, 1 for twice, etc.
+    *   **BGM:** `Mix_PlayMusic(music, loops)`. `loops` is -1 for infinite looping.
+5.  **Cleanup:** Call `Mix_CloseAudio()` and `Mix_Quit()` (counterpart to `IMG_Quit` for SDL_image, `TTF_Quit` for SDL_ttf) when the game exits.
 
-### How to Code and Develop
+### Code Example (C++/SDL_mixer)
 
-1.  **Choose an Audio Library:** Strongly recommended. Examples include:
-    *   **Python:** `pygame.mixer`, `playsound` (simple), `python-sounddevice` + `soundfile` (more control), `pyglet.media`.
-    *   **C++/Others:** SDL_mixer, OpenAL, FMOD, Wwise, SoLoud.
-    *   **Web:** Web Audio API.
-    Reinventing audio playback from scratch is very complex.
-2.  **Sound Resource Management:** Create a class to load and cache sound data. `Sound` objects might wrap the library's sound objects.
-3.  **Audio Manager/Player Class:**
-    *   Provides a simple API: `play_sfx(sound_name)`, `play_music(music_name)`, `stop_music()`, `set_volume()`.
-    *   Manages loaded sound resources.
-    *   Interacts with the chosen audio library to control playback, channels, volume, looping, etc.
-4.  **Error Handling:** Gracefully handle cases where audio files are missing or the audio device has issues.
+**`AudioManager.h` (Conceptual)**
+```cpp
+// AudioManager.h
+#pragma once
+#include <SDL_mixer.h>
+#include <string>
+#include <map>
+#include <iostream>
 
-### Code Example (Conceptual - using a hypothetical Python audio library similar to `pygame.mixer`)
+class AudioManager {
+public:
+    static AudioManager& getInstance(); // Singleton
 
-```python
-# This example is highly conceptual and mimics patterns seen in libraries like Pygame Mixer.
-# Actual implementation details depend heavily on the chosen audio library.
+    bool init(int frequency = 44100, Uint16 format = MIX_DEFAULT_FORMAT, int channels = 2, int chunksize = 2048);
 
-class SoundData: # Represents a loaded sound effect or music track
-    def __init__(self, filepath, sound_object_from_lib):
-        self.filepath = filepath
-        self.lib_sound_obj = sound_object_from_lib # The actual sound object from the audio library
+    bool loadSFX(const std::string& id, const std::string& filePath);
+    bool loadMusic(const std::string& id, const std::string& filePath);
 
-class AudioPlayer:
-    def __init__(self, audio_library_wrapper):
-        self.audio_lib = audio_library_wrapper # Your wrapper around the actual audio library
-        self.sfx_cache = {}  # sound_id -> SoundData
-        self.music_cache = {} # music_id -> SoundData
+    // Play SFX on the first available channel, or a specific one. Returns channel played on.
+    int playSFX(const std::string& id, int loops = 0, int channel = -1, int volume = -1); // volume -1 for default
+    void playMusic(const std::string& id, int loops = -1); // -1 for infinite loop
 
-        self.current_music_id = None
-        self._global_sfx_volume = 1.0 # 0.0 to 1.0
-        self._global_music_volume = 1.0 # 0.0 to 1.0
+    void stopMusic();
+    void pauseMusic();
+    void resumeMusic();
 
-        self.audio_lib.init_mixer() # Initialize the underlying audio system
+    void setSFXVolume(const std::string& id, int volume); // Volume 0-128 for a specific SFX
+    void setMasterSFXVolume(int volume); // Volume 0-128 for all SFX on channels
+    void setMusicVolume(int volume);   // Volume 0-128
 
-    def load_sfx(self, sfx_id, filepath):
-        if sfx_id not in self.sfx_cache:
-            sound_obj = self.audio_lib.load_sound_effect(filepath)
-            if sound_obj:
-                self.sfx_cache[sfx_id] = SoundData(filepath, sound_obj)
-                print(f"SFX '{sfx_id}' loaded from '{filepath}'")
-            else:
-                print(f"Warning: Failed to load SFX '{sfx_id}' from '{filepath}'")
-                self.sfx_cache[sfx_id] = None # Mark as failed
-        return self.sfx_cache.get(sfx_id)
+    void clean();
 
-    def load_music(self, music_id, filepath):
-        if music_id not in self.music_cache:
-            # Music is often handled differently (streaming) by libraries
-            # For this example, assume load_music_track prepares it for playing/streaming
-            music_obj_ref = self.audio_lib.load_music_track(filepath) # Might just be filepath for streaming libs
-            if music_obj_ref: # Could be the path itself or a library object
-                self.music_cache[music_id] = SoundData(filepath, music_obj_ref)
-                print(f"Music '{music_id}' loaded/prepared from '{filepath}'")
-            else:
-                print(f"Warning: Failed to load Music '{music_id}' from '{filepath}'")
-                self.music_cache[music_id] = None
-        return self.music_cache.get(music_id)
+private:
+    AudioManager() = default;
+    ~AudioManager();
 
-    def play_sfx(self, sfx_id, volume_multiplier=1.0, loops=0):
-        sound_data = self.sfx_cache.get(sfx_id)
-        if sound_data and sound_data.lib_sound_obj:
-            effective_volume = self._global_sfx_volume * volume_multiplier
-            self.audio_lib.play_sfx_on_channel(sound_data.lib_sound_obj, effective_volume, loops)
-            # print(f"Playing SFX: {sfx_id} at volume {effective_volume:.2f}")
-        else:
-            print(f"SFX '{sfx_id}' not found or not loaded.")
+    std::map<std::string, Mix_Chunk*> sfxMap;
+    std::map<std::string, Mix_Music*> musicMap;
+    bool isInitialized = false;
 
-    def play_music(self, music_id, volume_multiplier=1.0, loops=-1, fade_ms=0): # loops = -1 for infinite
-        music_data = self.music_cache.get(music_id)
-        if music_data and music_data.lib_sound_obj: # lib_sound_obj might be the filepath for music
-            effective_volume = self._global_music_volume * volume_multiplier
-            self.audio_lib.play_music_track(music_data.lib_sound_obj, effective_volume, loops, fade_ms)
-            self.current_music_id = music_id
-            # print(f"Playing Music: {music_id} at volume {effective_volume:.2f}")
-        else:
-            print(f"Music '{music_id}' not found or not loaded.")
-
-    def stop_music(self, fade_ms=0):
-        self.audio_lib.stop_music_playback(fade_ms)
-        self.current_music_id = None
-        # print("Music stopped.")
-
-    def pause_music(self):
-        self.audio_lib.pause_music_playback()
-
-    def resume_music(self):
-        self.audio_lib.resume_music_playback()
-
-    def set_sfx_volume(self, volume): # Sets global SFX volume
-        self._global_sfx_volume = max(0.0, min(1.0, volume))
-        # Some libraries might allow adjusting all SFX channels, others don't directly
-        print(f"Global SFX volume set to {self._global_sfx_volume:.2f}")
-
-    def set_music_volume(self, volume): # Sets global Music volume
-        self._global_music_volume = max(0.0, min(1.0, volume))
-        if self.current_music_id: # If music is playing, adjust its volume
-            self.audio_lib.set_current_music_playback_volume(self._global_music_volume)
-        print(f"Global Music volume set to {self._global_music_volume:.2f}")
-
-    def is_music_playing(self):
-        return self.audio_lib.get_is_music_playing()
-
-# --- Conceptual Audio Library Wrapper (Interface for your chosen library) ---
-# class MyAudioLibWrapper:
-#     def __init__(self): self.is_initialized = False
-#     def init_mixer(self):
-#         # e.g., pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-#         self.is_initialized = True
-#         print("Audio Library Initialized (Conceptual).")
-#     def load_sound_effect(self, filepath):
-#         # e.g., return pygame.mixer.Sound(filepath)
-#         if not self.is_initialized: return None
-#         print(f"LIB: Loading SFX {filepath}")
-#         return {"path": filepath, "type": "sfx"} # Placeholder
-#     def load_music_track(self, filepath):
-#         # For pygame.mixer.music, you just need the path. It's loaded on play.
-#         if not self.is_initialized: return None
-#         print(f"LIB: Preparing Music track {filepath}")
-#         return filepath # Placeholder, actual object might not be needed until play
-#     def play_sfx_on_channel(self, sfx_obj, volume, loops):
-#         # e.g., channel = sfx_obj_pygame.play(loops=loops)
-#         # channel.set_volume(volume)
-#         if not self.is_initialized: return
-#         print(f"LIB: Playing SFX {sfx_obj['path']} at vol {volume}, loops: {loops}")
-#     def play_music_track(self, music_obj_ref, volume, loops, fade_ms): # music_obj_ref is often filepath
-#         # e.g., pygame.mixer.music.load(music_obj_ref)
-#         # pygame.mixer.music.set_volume(volume)
-#         # pygame.mixer.music.play(loops=loops, fade_ms=fade_ms)
-#         if not self.is_initialized: return
-#         print(f"LIB: Playing Music {music_obj_ref} at vol {volume}, loops: {loops}, fade: {fade_ms}ms")
-#     def stop_music_playback(self, fade_ms):
-#         # e.g., pygame.mixer.music.fadeout(fade_ms) or pygame.mixer.music.stop()
-#         if not self.is_initialized: return
-#         print(f"LIB: Stopping music (fade: {fade_ms}ms)")
-#     def pause_music_playback(self):
-#         # e.g., pygame.mixer.music.pause()
-#         if not self.is_initialized: return
-#         print("LIB: Pausing music")
-#     def resume_music_playback(self):
-#         # e.g., pygame.mixer.music.unpause()
-#         if not self.is_initialized: return
-#         print("LIB: Resuming music")
-#     def set_current_music_playback_volume(self, volume):
-#         # e.g., pygame.mixer.music.set_volume(volume)
-#         if not self.is_initialized: return
-#         print(f"LIB: Setting current music volume to {volume}")
-#     def get_is_music_playing(self):
-#         # e.g., return pygame.mixer.music.get_busy()
-#         if not self.is_initialized: return False
-#         return True # Placeholder
-
-# Example Usage:
-# my_audio_lib_wrapper = MyAudioLibWrapper()
-# audio_player = AudioPlayer(my_audio_lib_wrapper)
-
-# audio_player.load_sfx("jump", "sfx/jump.wav")
-# audio_player.load_sfx("coin", "sfx/coin.ogg") # OGG is also good for SFX
-# audio_player.load_music("level_theme", "music/level1.mp3")
-
-# audio_player.set_sfx_volume(0.8)
-# audio_player.set_music_volume(0.5)
-
-# audio_player.play_music("level_theme")
-# # In game, when player jumps:
-# # audio_player.play_sfx("jump", volume_multiplier=0.9) # 0.9 * global_sfx_volume
-# # When player collects coin:
-# # audio_player.play_sfx("coin")
+    // Prevent copying
+    AudioManager(const AudioManager&) = delete;
+    AudioManager& operator=(const AudioManager&) = delete;
+};
 ```
 
-**Explanation:**
+**`AudioManager.cpp` (Conceptual)**
+```cpp
+// AudioManager.cpp
+#include "AudioManager.h"
 
-*   `SoundData`: A simple container for a loaded sound/music resource and its original filepath.
-*   `AudioPlayer`:
-    *   Takes an `audio_library_wrapper` in its constructor. This wrapper would contain the actual calls to your chosen audio library (e.g., `pygame.mixer` functions).
-    *   `sfx_cache` and `music_cache`: Dictionaries to store loaded `SoundData` objects, preventing redundant loading.
-    *   `load_sfx`/`load_music`: Load audio files via the wrapper and store them.
-    *   `play_sfx`/`play_music`: Play sounds using the wrapper. They apply global volume settings and per-call volume multipliers. Music playback often supports looping and fading.
-    *   Volume control (`set_sfx_volume`, `set_music_volume`): Adjusts the base volume for categories.
-    *   `stop_music`, `pause_music`, `resume_music`: Basic music playback controls.
-*   **`MyAudioLibWrapper` (Conceptual):** This class is crucial. It's an abstraction layer. You'd implement its methods using the specific functions of your chosen audio library. This keeps `AudioPlayer` cleaner and makes it easier to swap audio libraries if needed.
-*   **Error Handling:** The example includes basic print statements for errors. A robust system would have more sophisticated error logging or fallback mechanisms.
+AudioManager& AudioManager::getInstance() {
+    static AudioManager instance;
+    return instance;
+}
+
+AudioManager::~AudioManager() {
+    clean();
+}
+
+bool AudioManager::init(int frequency, Uint16 format, int channels, int chunksize) {
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        std::cerr << "Failed to initialize SDL_AUDIO: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    if (Mix_OpenAudio(frequency, format, channels, chunksize) == -1) {
+        std::cerr << "Failed to open audio: " << Mix_GetError() << std::endl;
+        isInitialized = false;
+        return false;
+    }
+    // Optionally allocate more channels: Mix_AllocateChannels(16);
+    isInitialized = true;
+    std::cout << "AudioManager initialized successfully." << std::endl;
+    return true;
+}
+
+bool AudioManager::loadSFX(const std::string& id, const std::string& filePath) {
+    if (!isInitialized) return false;
+    if (sfxMap.count(id)) return true; // Already loaded
+
+    Mix_Chunk* chunk = Mix_LoadWAV(filePath.c_str());
+    if (!chunk) {
+        std::cerr << "Failed to load SFX: " << filePath << " - " << Mix_GetError() << std::endl;
+        return false;
+    }
+    sfxMap[id] = chunk;
+    return true;
+}
+
+bool AudioManager::loadMusic(const std::string& id, const std::string& filePath) {
+    if (!isInitialized) return false;
+    if (musicMap.count(id)) return true;
+
+    Mix_Music* music = Mix_LoadMUS(filePath.c_str());
+    if (!music) {
+        std::cerr << "Failed to load Music: " << filePath << " - " << Mix_GetError() << std::endl;
+        return false;
+    }
+    musicMap[id] = music;
+    return true;
+}
+
+int AudioManager::playSFX(const std::string& id, int loops, int specific_channel, int volume) {
+    if (!isInitialized || !sfxMap.count(id)) return -1;
+
+    int channelPlayedOn = Mix_PlayChannel(specific_channel, sfxMap[id], loops);
+    if(channelPlayedOn != -1 && volume >= 0 && volume <= MIX_MAX_VOLUME) {
+        Mix_Volume(channelPlayedOn, volume);
+    }
+    return channelPlayedOn;
+}
+
+void AudioManager::playMusic(const std::string& id, int loops) {
+    if (!isInitialized || !musicMap.count(id)) return;
+    if (Mix_PlayMusic(musicMap[id], loops) == -1) {
+        std::cerr << "Failed to play music: " << id << " - " << Mix_GetError() << std::endl;
+    }
+}
+
+void AudioManager::stopMusic() {
+    if (!isInitialized) return;
+    Mix_HaltMusic();
+}
+void AudioManager::pauseMusic() { if (isInitialized) Mix_PauseMusic(); }
+void AudioManager::resumeMusic() { if (isInitialized) Mix_ResumeMusic(); }
+
+
+void AudioManager::setSFXVolume(const std::string& id, int volume) {
+    if (!isInitialized || !sfxMap.count(id)) return;
+    Mix_VolumeChunk(sfxMap[id], std::max(0, std::min(volume, MIX_MAX_VOLUME)));
+}
+
+void AudioManager::setMasterSFXVolume(int volume) {
+    if (!isInitialized) return;
+    // This sets volume for all chunks on their specific channels if played after this call.
+    // Or iterate through active channels and set their volume.
+    // For a simpler master volume, you might adjust individual chunk volumes before playing,
+    // or use Mix_Volume(channel, volume) for each active channel.
+    // SDL_mixer doesn't have a single "master SFX volume" like it does for music.
+    // A common approach is to set volume on a specific channel: Mix_Volume(channel, volume)
+    // Or set the default volume for all chunks:
+    for(auto const& [sfx_id, chunk] : sfxMap) {
+        Mix_VolumeChunk(chunk, std::max(0, std::min(volume, MIX_MAX_VOLUME)));
+    }
+    // Note: Mix_VolumeChunk sets the volume for that chunk. If you want a global effect
+    // on already playing sounds, you'd need to iterate active channels.
+}
+
+
+void AudioManager::setMusicVolume(int volume) {
+    if (!isInitialized) return;
+    Mix_VolumeMusic(std::max(0, std::min(volume, MIX_MAX_VOLUME)));
+}
+
+void AudioManager::clean() {
+    if (!isInitialized) return;
+    for (auto const& [key, val] : sfxMap) {
+        Mix_FreeChunk(val);
+    }
+    sfxMap.clear();
+    for (auto const& [key, val] : musicMap) {
+        Mix_FreeMusic(val);
+    }
+    musicMap.clear();
+
+    Mix_CloseAudio();
+    // Mix_Quit(); // Call this along with IMG_Quit, TTF_Quit in main game shutdown
+    isInitialized = false;
+    std::cout << "AudioManager cleaned." << std::endl;
+}
+```
+
+**Initialization & Usage (in `main.cpp` or `Game.cpp`)**
+```cpp
+// // At game start:
+// if (AudioManager::getInstance().init()) {
+//     AudioManager::getInstance().loadSFX("jump", "assets/sounds/jump.wav");
+//     AudioManager::getInstance().loadMusic("bgm_level1", "assets/music/level1.mp3");
+//     AudioManager::getInstance().setMusicVolume(64); // 50% volume
+//     AudioManager::getInstance().playMusic("bgm_level1", -1); // Loop indefinitely
+// }
+
+// // When player jumps:
+// AudioManager::getInstance().playSFX("jump");
+
+// // At game end:
+// AudioManager::getInstance().clean();
+// Mix_Quit(); // Should be called after all audio operations are done
+```
+**Explanation:**
+*   **Singleton `AudioManager`**: Manages all audio operations.
+*   **`init()`**: Initializes SDL_mixer using `Mix_OpenAudio`.
+*   **`loadSFX`/`loadMusic`**: Loads WAV files into `Mix_Chunk*` and music files (MP3, OGG, etc.) into `Mix_Music*`, caching them.
+*   **`playSFX`/`playMusic`**: Uses `Mix_PlayChannel` and `Mix_PlayMusic`.
+*   **Volume Control**: `Mix_VolumeChunk` (per sound effect type) and `Mix_VolumeMusic` (global for music). SDL_mixer volumes range from 0 (silent) to `MIX_MAX_VOLUME` (128).
+*   **`clean()`**: Frees all loaded chunks and music, then calls `Mix_CloseAudio`. `Mix_Quit()` should be called at the very end of the program.
 
 ---
 
@@ -1090,269 +1150,234 @@ class AudioPlayer:
 
 ### Conceptual Overview
 
-Serialization is the process of converting an object's state (its data) into a format that can be stored (e.g., in a file) or transmitted. Deserialization is the reverse process: reconstructing the object from that stored format.
+Serialization converts object data into a storable/transmittable format. YAML is human-readable and good for config files, level data, etc. Deserialization reconstructs objects from this format.
 
-YAML (YAML Ain't Markup Language) is a human-readable data serialization language. It's often used for configuration files, data exchange, and saving game state or level data because of its clarity and ease of use compared to formats like JSON (for complex, nested data) or XML.
+### How to Code and Develop (C++ with `yaml-cpp`)
 
-Common use cases in game development:
+1.  **Choose a YAML Library:** `yaml-cpp` is a popular choice for C++. You'll need to integrate it into your project, often as a Git submodule or by finding/building it with CMake.
+    *   **CMake Integration for `yaml-cpp` (Example if fetched as submodule):**
+        ```cmake
+        # In your main CMakeLists.txt
+        # add_subdirectory(external/yaml-cpp) # If yaml-cpp is in external/
+        # target_link_libraries(MyGame PRIVATE yaml-cpp)
 
-*   **Configuration Files:** Game settings (resolution, audio volumes, key bindings), entity archetypes, item definitions.
-*   **Level Data:** Storing object placements, tilemap layouts, NPC properties, event triggers.
-*   **Game Saves:** Saving player progress, inventory, current world state (though binary formats might be preferred for performance/security for save games).
-
-### How to Code and Develop
-
-1.  **Choose a YAML Library:** Most programming languages have well-supported YAML libraries (e.g., `PyYAML` for Python, `SnakeYAML` for Java, `yaml-cpp` for C++, `serde_yaml` for Rust, `YAMLDotNet` for C#).
-2.  **Define Data Structures:** The data you want to serialize/deserialize should be organized into classes or structures. For simple data, built-in types like dictionaries and lists work fine. For complex game objects, custom classes are better.
+        # Or, if installed system-wide or via find_package:
+        # find_package(YAML_CPP REQUIRED)
+        # target_link_libraries(MyGame PRIVATE YAML::yaml-cpp)
+        ```
+2.  **Define Data Structures:** Create C++ structs or classes for the data you want to serialize (e.g., `GameSettings`, `LevelData`, `Vec2D`).
 3.  **Serialization (Saving to YAML):**
-    *   Populate your data structures with the current game state or configuration.
-    *   Use the YAML library's "dump" or "serialize" function to convert these structures into a YAML formatted string or write directly to a file.
+    *   Include `<yaml-cpp/yaml.h>`.
+    *   Create a `YAML::Emitter` object.
+    *   Use emitter methods (`YAML::BeginMap`, `YAML::Key`, `YAML::Value`, `YAML::EndMap`, `YAML::BeginSeq`, etc.) to structure your data.
+    *   Write the emitter's output to an `std::ofstream`.
 4.  **Deserialization (Loading from YAML):**
-    *   Use the YAML library's "load" or "deserialize" function to read data from a YAML file or string.
-    *   The library will typically reconstruct your objects or provide dictionaries/lists that you then use to populate your game's data structures. **Always use "safe load" functions if available** to prevent arbitrary code execution from untrusted YAML sources.
-5.  **Custom Type Handling (Advanced):**
-    *   To make YAML work seamlessly with your custom game classes (e.g., `Enemy`, `Item`, `Vector2D`), you often need to tell the YAML library how to represent these classes in YAML and how to reconstruct them.
-    *   This usually involves registering "representers" (object to YAML) and "constructors" (YAML to object) for your custom types.
+    *   Load a YAML file into a `YAML::Node` object using `YAML::LoadFile("path/to/file.yaml")`.
+    *   Access data using `node["key"]`, `node[index]`, and `.as<type>()` conversions (e.g., `node["width"].as<int>()`).
+    *   Check if nodes exist using `if (node["optional_key"]) { ... }`.
+5.  **Custom Type Conversion:** For your custom C++ classes/structs to work directly with `yaml-cpp`'s `.as<MyType>()` and `emitter << MyTypeInstance`, you need to specialize the `YAML::convert<MyType>` template. This involves defining `encode` (MyType to YAML Node) and `decode` (YAML Node to MyType) static methods.
 
-### Code Example (Python with PyYAML)
+### Code Example (C++ with `yaml-cpp`)
 
-First, ensure you have PyYAML installed: `pip install PyYAML`
-
-```python
-import yaml
-
-# --- 1. Basic Data Serialization (Dictionaries, Lists) ---
-game_settings = {
-    "game_title": "Adventures in YAML",
-    "version": "1.0.2",
-    "display": {
-        "width": 1920,
-        "height": 1080,
-        "fullscreen": True,
-        "vsync": False
-    },
-    "audio": {
-        "master_volume": 75, # Percentage
-        "music_volume": 60,
-        "sfx_volume": 80
-    },
-    "player_defaults": {
-        "start_health": 100,
-        "start_mana": 50,
-        "inventory_size": 20
-    },
-    "enemy_types_enabled": ["goblin", "orc", "skeleton"]
-}
-
-# Serialize to YAML string
-try:
-    yaml_string_output = yaml.dump(game_settings, sort_keys=False, indent=2)
-    print("--- Serialized YAML String ---")
-    print(yaml_string_output)
-except yaml.YAMLError as e:
-    print(f"Error during YAML dumping: {e}")
-
-
-# Serialize to a file
-settings_filepath = "game_settings.yaml"
-try:
-    with open(settings_filepath, "w") as f:
-        yaml.dump(game_settings, f, sort_keys=False, indent=2, Dumper=yaml.SafeDumper) # Use SafeDumper for output if desired
-    print(f"Saved settings to {settings_filepath}")
-except Exception as e:
-    print(f"Error saving YAML to file: {e}")
-
-
-# Deserialize from YAML string
-try:
-    # Always use safe_load for untrusted or even trusted sources as a best practice
-    loaded_settings_from_string = yaml.safe_load(yaml_string_output)
-    print("\n--- Deserialized from String ---")
-    if loaded_settings_from_string:
-        print(f"Game Title (from string): {loaded_settings_from_string.get('game_title')}")
-        print(f"Master Volume (from string): {loaded_settings_from_string.get('audio', {}).get('master_volume')}")
-except yaml.YAMLError as e:
-    print(f"Error parsing YAML string: {e}")
-
-
-# Deserialize from a file
-try:
-    with open(settings_filepath, "r") as f:
-        loaded_settings_from_file = yaml.safe_load(f)
-    print("\n--- Deserialized from File ---")
-    if loaded_settings_from_file:
-        print(f"Fullscreen (from file): {loaded_settings_from_file.get('display', {}).get('fullscreen')}")
-        print(f"Enabled enemies (from file): {loaded_settings_from_file.get('enemy_types_enabled')}")
-except FileNotFoundError:
-    print(f"Error: {settings_filepath} not found.")
-except yaml.YAMLError as e:
-    print(f"Error parsing {settings_filepath}: {e}")
-except Exception as e:
-    print(f"Error loading YAML from file: {e}")
-
-
-# --- 2. Serializing Custom Objects ---
-class Vec2D: # A simple custom class
-    yaml_tag = '!Vec2D' # Recommended convention for custom tags
-
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return f"Vec2D(x={self.x}, y={self.y})"
-
-    # Representer: How to convert Vec2D object to YAML node
-    @classmethod
-    def to_yaml(cls, representer, node):
-        # Represent as a sequence (list) in YAML: [x, y]
-        return representer.represent_sequence(cls.yaml_tag, [node.x, node.y], flow_style=True)
-        # Alternatively, represent as a mapping (dictionary):
-        # return representer.represent_mapping(cls.yaml_tag, {'x': node.x, 'y': node.y})
-
-
-    # Constructor: How to create Vec2D object from YAML node
-    @classmethod
-    def from_yaml(cls, constructor, node):
-        # If represented as a sequence:
-        values = constructor.construct_sequence(node, deep=True)
-        return cls(values[0], values[1])
-        # If represented as a mapping:
-        # mapping = constructor.construct_mapping(node, deep=True)
-        # return cls(mapping['x'], mapping['y'])
-
-# Register the custom class with PyYAML's SafeLoader/SafeDumper
-yaml.add_representer(Vec2D, Vec2D.to_yaml, Dumper=yaml.SafeDumper)
-yaml.add_constructor(Vec2D.yaml_tag, Vec2D.from_yaml, Loader=yaml.SafeLoader)
-
-
-class GameObjectData:
-    yaml_tag = '!GameObject'
-
-    def __init__(self, name, position, health, tags=None):
-        self.name = name
-        self.position = position # Expected to be a Vec2D instance
-        self.health = health
-        self.tags = tags if tags is not None else []
-
-    def __repr__(self):
-        return (f"GameObjectData(name='{self.name}', position={self.position}, "
-                f"health={self.health}, tags={self.tags})")
-
-    @classmethod
-    def to_yaml(cls, representer, node):
-        return representer.represent_mapping(cls.yaml_tag, {
-            'name': node.name,
-            'position': node.position, # PyYAML will use Vec2D's representer
-            'health': node.health,
-            'tags': node.tags
-        })
-
-    @classmethod
-    def from_yaml(cls, constructor, node):
-        mapping = constructor.construct_mapping(node, deep=True)
-        return cls(
-            mapping['name'],
-            mapping['position'], # PyYAML will use Vec2D's constructor
-            mapping['health'],
-            mapping.get('tags', [])
-        )
-
-yaml.add_representer(GameObjectData, GameObjectData.to_yaml, Dumper=yaml.SafeDumper)
-yaml.add_constructor(GameObjectData.yaml_tag, GameObjectData.from_yaml, Loader=yaml.SafeLoader)
-
-
-# Create instances with custom objects
-player_obj = GameObjectData(name="Hero", position=Vec2D(10, 25.5), health=100, tags=["player", "主角"])
-enemy_obj = GameObjectData(name="Goblin", position=Vec2D(50, 40.2), health=30, tags=["enemy", "hostile"])
-level_objects = {"scene_name": "Forest Clearing", "objects": [player_obj, enemy_obj]}
-
-
-# Serialize data with custom objects
-level_filepath = "level_data.yaml"
-try:
-    with open(level_filepath, "w", encoding="utf-8") as f: # Use utf-8 for non-ASCII tags
-        yaml.dump(level_objects, f, sort_keys=False, indent=2, Dumper=yaml.SafeDumper, allow_unicode=True)
-    print(f"\nSaved level data with custom objects to {level_filepath}")
-except Exception as e:
-    print(f"Error saving level data: {e}")
-
-# Deserialize data with custom objects
-try:
-    with open(level_filepath, "r", encoding="utf-8") as f:
-        loaded_level_data = yaml.safe_load(f)
-    print("\n--- Deserialized Custom Objects from File ---")
-    if loaded_level_data:
-        print(f"Scene: {loaded_level_data.get('scene_name')}")
-        for obj_data in loaded_level_data.get('objects', []):
-            print(f"  Loaded: {obj_data}")
-            if isinstance(obj_data, GameObjectData) and isinstance(obj_data.position, Vec2D):
-                print(f"    Position X: {obj_data.position.x}")
-except FileNotFoundError:
-    print(f"Error: {level_filepath} not found.")
-except yaml.YAMLError as e:
-    print(f"Error parsing {level_filepath}: {e}")
-except Exception as e:
-    print(f"Error loading level data: {e}")
-
+**`Vec2D.h` (Example Custom Type)**
+```cpp
+// Vec2D.h (from physics example, now for serialization)
+#pragma once
+struct Vec2D {
+    float x = 0.0f, y = 0.0f;
+};
 ```
 
-**`game_settings.yaml` (created by the script):**
-```yaml
-game_title: Adventures in YAML
-version: 1.0.2
-display:
-  width: 1920
-  height: 1080
-  fullscreen: true
-  vsync: false
-audio:
-  master_volume: 75
-  music_volume: 60
-  sfx_volume: 80
-player_defaults:
-  start_health: 100
-  start_mana: 50
-  inventory_size: 20
-enemy_types_enabled:
-  - goblin
-  - orc
-  - skeleton
+**`SerializationHelpers.h` (for `yaml-cpp` custom type conversion)**
+```cpp
+// SerializationHelpers.h
+#pragma once
+#include "Vec2D.h" // Your custom type
+#include <yaml-cpp/yaml.h> // Should be included after your types if they are used in templates
+
+// Specialization of YAML::convert for Vec2D
+namespace YAML {
+template<>
+struct convert<Vec2D> {
+    // MyType -> YAML::Node
+    static Node encode(const Vec2D& rhs) {
+        Node node;
+        node.push_back(rhs.x); // Represent Vec2D as a sequence [x, y]
+        node.push_back(rhs.y);
+        node.SetStyle(EmitterStyle::Flow); // Optional: makes it [x, y] instead of a multi-line sequence
+        return node;
+    }
+
+    // YAML::Node -> MyType
+    static bool decode(const Node& node, Vec2D& rhs) {
+        if (!node.IsSequence() || node.size() != 2) {
+            return false; // Not a valid Vec2D sequence
+        }
+        rhs.x = node[0].as<float>();
+        rhs.y = node[1].as<float>();
+        return true;
+    }
+};
+
+// Example for a more complex struct
+struct PlayerConfig {
+    std::string name;
+    int health;
+    Vec2D startPosition;
+};
+
+template<>
+struct convert<PlayerConfig> {
+    static Node encode(const PlayerConfig& rhs) {
+        Node node;
+        node["name"] = rhs.name;
+        node["health"] = rhs.health;
+        node["start_position"] = rhs.startPosition; // Uses Vec2D's encoder
+        return node;
+    }
+
+    static bool decode(const Node& node, PlayerConfig& rhs) {
+        if (!node.IsMap() || !node["name"] || !node["health"] || !node["start_position"]) {
+            return false; // Missing required fields
+        }
+        rhs.name = node["name"].as<std::string>();
+        rhs.health = node["health"].as<int>();
+        rhs.startPosition = node["start_position"].as<Vec2D>(); // Uses Vec2D's decoder
+        return true;
+    }
+};
+
+} // namespace YAML
 ```
 
-**`level_data.yaml` (created by the script):**
+**`ConfigManager.cpp` (Conceptual - Saving/Loading)**
+```cpp
+// ConfigManager.cpp
+#include <fstream>
+#include <iostream>
+#include "SerializationHelpers.h" // Must be included for custom types to work with YAML::Node::as()
+
+// void savePlayerConfig(const PlayerConfig& config, const std::string& filePath) {
+//     YAML::Emitter out;
+//     out << YAML::BeginMap;
+//     out << YAML::Key << "player_configuration";
+//     out << YAML::Value << config; // Uses YAML::convert<PlayerConfig>::encode
+//     out << YAML::EndMap;
+
+//     std::ofstream fout(filePath);
+//     if (!fout.is_open()) {
+//         std::cerr << "Failed to open file for writing: " << filePath << std::endl;
+//         return;
+//     }
+//     fout << out.c_str();
+//     std::cout << "Player config saved to " << filePath << std::endl;
+// }
+
+// PlayerConfig loadPlayerConfig(const std::string& filePath) {
+//     PlayerConfig config;
+//     try {
+//         YAML::Node rootNode = YAML::LoadFile(filePath);
+//         if (rootNode["player_configuration"]) {
+//             config = rootNode["player_configuration"].as<PlayerConfig>(); // Uses YAML::convert<PlayerConfig>::decode
+//             std::cout << "Player config loaded from " << filePath << ": " << config.name << std::endl;
+//         } else {
+//             std::cerr << "player_configuration key not found in " << filePath << std::endl;
+//         }
+//     } catch (const YAML::Exception& e) {
+//         std::cerr << "Error loading or parsing YAML file " << filePath << ": " << e.what() << std::endl;
+//         // Return default config or throw
+//     }
+//     return config;
+// }
+
+// int main() { // Example usage
+//     PlayerConfig myPlayer;
+//     myPlayer.name = "Hero";
+//     myPlayer.health = 100;
+//     myPlayer.startPosition = {50.0f, 75.0f};
+//     savePlayerConfig(myPlayer, "player_config.yaml");
+
+//     PlayerConfig loadedPlayer = loadPlayerConfig("player_config.yaml");
+//     std::cout << "Loaded player: " << loadedPlayer.name
+//               << ", HP: " << loadedPlayer.health
+//               << ", Pos: (" << loadedPlayer.startPosition.x << ", " << loadedPlayer.startPosition.y << ")"
+//               << std::endl;
+
+//     // Example of direct emission for simple data
+//     YAML::Emitter basicEmitter;
+//     basicEmitter << YAML::BeginMap;
+//     basicEmitter << YAML::Key << "window_title" << YAML::Value << "My Awesome Game";
+//     basicEmitter << YAML::Key << "resolution";
+//     basicEmitter << YAML::BeginMap;
+//     basicEmitter << YAML::Key << "width" << YAML::Value << 1280;
+//     basicEmitter << YAML::Key << "height" << YAML::Value << 720;
+//     basicEmitter << YAML::EndMap; // end resolution
+//     basicEmitter << YAML::Key << "controls";
+//     basicEmitter << YAML::BeginSeq;
+//     basicEmitter << YAML::BeginMap << YAML::Key << "action" << YAML::Value << "jump" << YAML::Key << "key" << YAML::Value << "SPACE" << YAML::EndMap;
+//     basicEmitter << YAML::BeginMap << YAML::Key << "action" << YAML::Value << "move_left" << YAML::Key << "key" << YAML::Value << "A" << YAML::EndMap;
+//     basicEmitter << YAML::EndSeq; // end controls
+//     basicEmitter << YAML::EndMap; // end root
+
+//     std::ofstream fout_basic("basic_config.yaml");
+//     fout_basic << basicEmitter.c_str();
+//     fout_basic.close();
+//     std::cout << "Basic config saved to basic_config.yaml" << std::endl;
+
+//     // Loading basic config
+//     try {
+//        YAML::Node configNode = YAML::LoadFile("basic_config.yaml");
+//        std::string title = configNode["window_title"].as<std::string>();
+//        int width = configNode["resolution"]["width"].as<int>();
+//        std::cout << "Loaded Title: " << title << ", Width: " << width << std::endl;
+//        if(configNode["controls"] && configNode["controls"].IsSequence()){
+//            for(const auto& control : configNode["controls"]){
+//                std::cout << "Action: " << control["action"].as<std::string>() << " Key: " << control["key"].as<std::string>() << std::endl;
+//            }
+//        }
+//     } catch (const YAML::Exception& e) {
+//        std::cerr << "Error loading basic_config.yaml: " << e.what() << std::endl;
+//     }
+
+//     return 0;
+// }
+```
+**`player_config.yaml` (Output from example)**
 ```yaml
-scene_name: Forest Clearing
-objects:
-  - !GameObject
-    name: Hero
-    position: !Vec2D [10, 25.5]
-    health: 100
-    tags:
-      - player
-      - 主角
-  - !GameObject
-    name: Goblin
-    position: !Vec2D [50, 40.2]
-    health: 30
-    tags:
-      - enemy
-      - hostile
+player_configuration:
+  name: Hero
+  health: 100
+  start_position: [50, 75]
+```
+**`basic_config.yaml` (Output from example)**
+```yaml
+window_title: My Awesome Game
+resolution:
+  width: 1280
+  height: 720
+controls:
+  - action: jump
+    key: SPACE
+  - action: move_left
+    key: A
 ```
 
 **Explanation:**
-
-*   **Basic Serialization:** `yaml.dump()` converts Python dictionaries, lists, and basic types into YAML format. `yaml.safe_load()` (very important!) parses YAML back into Python objects, preventing execution of arbitrary code that could be embedded in malicious YAML files. Using `indent=2` makes the YAML file human-readable. `sort_keys=False` maintains the order of keys from Python dictionaries (Python 3.7+).
-*   **Custom Objects (`Vec2D`, `GameObjectData`):**
-    *   `yaml_tag`: A unique string (conventionally starting with `!`) that PyYAML uses in the YAML file to identify the class of the object. This allows `safe_load` to know which constructor to call.
-    *   `to_yaml` (representer): A class method registered with `yaml.add_representer()`. It tells PyYAML how to convert an instance of your custom class into a YAML representation (e.g., a sequence for `Vec2D` like `[x, y]`, or a mapping for `GameObjectData`).
-    *   `from_yaml` (constructor): A class method registered with `yaml.add_constructor()`. It tells PyYAML how to create an instance of your custom class from the corresponding YAML data.
-    *   `Dumper=yaml.SafeDumper` and `Loader=yaml.SafeLoader`: It's good practice to register custom types with the safe versions of the Dumper and Loader.
-    *   `allow_unicode=True`: Useful if your string data might contain non-ASCII characters.
-*   This system allows you to work with your native Python objects and easily save/load them to/from human-readable YAML files, which is excellent for configuration, level design, and simple game state.
+*   **`SerializationHelpers.h`**: This is where you define `YAML::convert` specializations for your custom types (`Vec2D`, `PlayerConfig`).
+    *   `encode`: Takes your custom type instance and returns a `YAML::Node`. For `Vec2D`, it creates a sequence `[x, y]`. For `PlayerConfig`, it creates a map.
+    *   `decode`: Takes a `YAML::Node` and populates an instance of your custom type. It returns `bool` for success/failure.
+*   **Saving (`savePlayerConfig`)**:
+    *   A `YAML::Emitter` is used to build the YAML structure.
+    *   `out << config;` automatically calls `YAML::convert<PlayerConfig>::encode`.
+    *   The result (`out.c_str()`) is written to a file.
+*   **Loading (`loadPlayerConfig`)**:
+    *   `YAML::LoadFile()` parses the file into a `YAML::Node`.
+    *   `rootNode["player_configuration"].as<PlayerConfig>()` automatically calls `YAML::convert<PlayerConfig>::decode`.
+    *   Error handling with `try-catch` for `YAML::Exception` is important.
+*   **Basic Data**: For simple configurations without custom C++ classes, you can directly build YAML using the emitter or access loaded nodes as maps/sequences.
 
 ---
 
-This guide provides a foundational understanding of these game development components. Each topic can become significantly more complex depending on the requirements of your game. Remember to consult documentation for specific libraries or game engines you choose to use, as they often provide optimized and feature-rich implementations of these systems.
+This guide provides a C++/SDL2-centric foundational understanding of these game development components. Each topic can become significantly more complex. Always consult the official SDL2 and library (SDL_image, SDL_mixer, yaml-cpp) documentation for detailed API information and best practices.
 
 Happy Gamedev!
